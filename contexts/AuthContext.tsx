@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!error && data) {
         setUser(data as UserProfile);
       } else if (error) {
-        console.error('Error fetching profile from DB:', error.message);
+        console.error('Profile fetch error:', error.message);
       }
     } catch (err) {
       console.error('Error in fetchProfile:', err);
@@ -69,51 +69,55 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) console.error("Sign in error:", error.message);
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
     try {
+      // 1. Пытаемся создать пользователя в Auth
       const { data, error: authError } = await supabase.auth.signUp({ 
         email, 
         password,
-        options: {
-          data: { full_name: fullName } // Сохраняем имя также в метаданные auth
+        options: { 
+          data: { 
+            full_name: fullName,
+            phone: phone
+          } 
         }
       });
 
       if (authError) {
-        console.error("Supabase Auth Error:", authError.message);
-        return { error: authError };
+        console.error("SignUp Auth Error (500 likely):", authError);
+        // Если ошибка 500, значит в БД что-то не так с триггерами или таблицами
+        return { 
+          error: { 
+            message: "Ошибка сервера (500). Скорее всего, в Supabase не создана таблица 'profiles'. Зайдите в Админ-панель и выполните SQL-скрипт." 
+          } 
+        };
       }
 
       if (data.user) {
-        // Создаем запись в таблице profiles
+        // 2. Создаем/обновляем профиль вручную (на случай если триггер не настроен)
         const { error: profileError } = await supabase
           .from('profiles')
-          .insert([{ 
+          .upsert({ 
             id: data.user.id, 
             full_name: fullName, 
-            phone, 
-            address, 
+            phone: phone, 
+            address: address, 
             role: 'user' 
-          }]);
+          });
         
         if (profileError) {
-          console.error("Database Profile Error:", profileError.message);
-          // Если ошибка в таблице, возвращаем более понятный текст
-          if (profileError.message.includes("relation \"profiles\" does not exist")) {
-            return { error: { message: "Ошибка: Таблица 'profiles' не создана в Supabase. Выполните SQL-скрипт из types.ts" } };
-          }
-          return { error: profileError };
+          console.error("Profile DB Error:", profileError);
+          // Если пользователь создался, но профиль нет - это не критично для Auth, но плохо для приложения
         }
       }
       
       return { error: null };
     } catch (err: any) {
-      console.error("System SignUp Error:", err);
-      return { error: { message: err.message || "Неизвестная ошибка при регистрации" } };
+      console.error("Auth exception:", err);
+      return { error: { message: err.message || "Ошибка системы" } };
     }
   };
 
