@@ -1,12 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase, MOCK_DISHES } from '../services/supabaseClient';
 import { Order, Courier, Dish } from '../types';
-import { Package, Users, Truck, UtensilsCrossed, CheckCircle, Clock, Plus, Edit2, Trash2, X, Save } from 'lucide-react';
+import { Package, Users, Truck, UtensilsCrossed, CheckCircle, Clock, Plus, Edit2, Trash2, X, Save, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from '../components/ui/Modal';
 
-// --- MOCK COURIERS DATA ---
+// --- MOCK COURIERS DATA (Still using local for demo, but dishes moved to DB) ---
 const MOCK_COURIERS: Courier[] = [
     { id: 1, name: "Алишер", phone: "+79001112233", vehicle: "Велосипед", status: "available" },
     { id: 2, name: "Борис", phone: "+79004445566", vehicle: "Авто", status: "busy" },
@@ -14,12 +15,13 @@ const MOCK_COURIERS: Courier[] = [
 ];
 
 const Admin: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'stats' | 'orders' | 'couriers' | 'menu'>('stats');
   const [orders, setOrders] = useState<Order[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [couriers, setCouriers] = useState<Courier[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Menu Modal State
   const [isDishModalOpen, setIsDishModalOpen] = useState(false);
@@ -29,32 +31,38 @@ const Admin: React.FC = () => {
   const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
   const [editingCourier, setEditingCourier] = useState<Partial<Courier>>({});
   
-  // Checking admin and loading data
   useEffect(() => {
-    // In a real app, strict redirect here.
-    
-    // 1. Load Orders
+    loadAllData();
+  }, [isAdmin]);
+
+  const loadAllData = async () => {
+    setIsSyncing(true);
+    // 1. Load Orders (From localStorage for now as per current structure, but could be Supabase)
     const savedOrders = localStorage.getItem('zhulebino_orders');
     if (savedOrders) setOrders(JSON.parse(savedOrders));
 
-    // 2. Load Dishes (with fallback to MOCK)
-    const savedDishes = localStorage.getItem('zhulebino_dishes');
-    if (savedDishes) {
-        setDishes(JSON.parse(savedDishes));
+    // 2. Load Dishes from Supabase (CRITICAL FIX)
+    const { data: dbDishes, error } = await supabase
+      .from('dishes')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (!error && dbDishes && dbDishes.length > 0) {
+      setDishes(dbDishes);
     } else {
-        setDishes(MOCK_DISHES);
-        localStorage.setItem('zhulebino_dishes', JSON.stringify(MOCK_DISHES));
+      // Fallback if DB empty
+      setDishes(MOCK_DISHES);
     }
 
-    // 3. Load Couriers (with fallback to MOCK)
+    // 3. Load Couriers
     const savedCouriers = localStorage.getItem('zhulebino_couriers');
     if (savedCouriers) {
         setCouriers(JSON.parse(savedCouriers));
     } else {
         setCouriers(MOCK_COURIERS);
-        localStorage.setItem('zhulebino_couriers', JSON.stringify(MOCK_COURIERS));
     }
-  }, [isAdmin]);
+    setIsSyncing(false);
+  };
 
   // --- ORDER HANDLERS ---
   const updateOrderStatus = (id: number, status: string) => {
@@ -63,38 +71,73 @@ const Admin: React.FC = () => {
     localStorage.setItem('zhulebino_orders', JSON.stringify(updated));
   };
 
-  // --- DISH HANDLERS ---
-  const saveDish = () => {
-      let updatedDishes = [...dishes];
+  // --- DISH HANDLERS (SUPABASE SYNCED) ---
+  const saveDish = async () => {
+      setIsSyncing(true);
       if (editingDish.id) {
-          // Edit existing
-          updatedDishes = updatedDishes.map(d => d.id === editingDish.id ? { ...d, ...editingDish } as Dish : d);
+          // Update existing in DB
+          const { error } = await supabase
+            .from('dishes')
+            .update({
+              name: editingDish.name,
+              category: editingDish.category,
+              price: editingDish.price,
+              image: editingDish.image,
+              description: editingDish.description,
+              available: editingDish.available
+            })
+            .eq('id', editingDish.id);
+          
+          if (error) alert("Ошибка обновления: " + error.message);
       } else {
-          // Add new
-          const newDish = { 
-              ...editingDish, 
-              id: Date.now(), 
+          // Insert new to DB
+          const { error } = await supabase
+            .from('dishes')
+            .insert([{ 
+              name: editingDish.name,
+              category: editingDish.category,
+              price: editingDish.price,
+              image: editingDish.image,
+              description: editingDish.description,
               available: true 
-          } as Dish;
-          updatedDishes.push(newDish);
+            }]);
+          
+          if (error) alert("Ошибка создания: " + error.message);
       }
-      setDishes(updatedDishes);
-      localStorage.setItem('zhulebino_dishes', JSON.stringify(updatedDishes));
+      
+      await loadAllData(); // Refresh list from DB
       setIsDishModalOpen(false);
+      setIsSyncing(false);
   };
 
-  const deleteDish = (id: number) => {
-      if(window.confirm('Вы уверены, что хотите удалить это блюдо?')) {
-        const updatedDishes = dishes.filter(d => d.id !== id);
-        setDishes(updatedDishes);
-        localStorage.setItem('zhulebino_dishes', JSON.stringify(updatedDishes));
+  const deleteDish = async (id: number) => {
+      if(window.confirm('Вы уверены, что хотите удалить это блюдо из базы данных?')) {
+        setIsSyncing(true);
+        const { error } = await supabase
+          .from('dishes')
+          .delete()
+          .eq('id', id);
+        
+        if (error) alert("Ошибка удаления: " + error.message);
+        await loadAllData();
+        setIsSyncing(false);
       }
   };
 
-  const toggleDishAvailability = (id: number) => {
-      const updatedDishes = dishes.map(d => d.id === id ? { ...d, available: !d.available } : d);
-      setDishes(updatedDishes);
-      localStorage.setItem('zhulebino_dishes', JSON.stringify(updatedDishes));
+  const toggleDishAvailability = async (id: number, currentStatus: boolean) => {
+      setIsSyncing(true);
+      const { error } = await supabase
+        .from('dishes')
+        .update({ available: !currentStatus })
+        .eq('id', id);
+      
+      if (error) {
+        alert("Ошибка стоп-листа: " + error.message);
+      } else {
+        // Update local state immediately for UX
+        setDishes(dishes.map(d => d.id === id ? { ...d, available: !currentStatus } : d));
+      }
+      setIsSyncing(false);
   };
 
   const openDishModal = (dish?: Dish) => {
@@ -102,7 +145,7 @@ const Admin: React.FC = () => {
       setIsDishModalOpen(true);
   };
 
-  // --- COURIER HANDLERS ---
+  // --- COURIER HANDLERS (STILL LOCAL FOR NOW) ---
    const saveCourier = () => {
       let updatedCouriers = [...couriers];
       if (editingCourier.id) {
@@ -226,17 +269,19 @@ const Admin: React.FC = () => {
 
   const renderMenu = () => (
       <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500 italic">Данные синхронизированы с базой Supabase</p>
               <button 
                 onClick={() => openDishModal()} 
-                className="bg-amber-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-800 transition shadow"
+                disabled={isSyncing}
+                className="bg-amber-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-800 transition shadow disabled:opacity-50"
               >
                   <Plus size={20} /> Добавить блюдо
               </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {dishes.map(dish => (
-                  <div key={dish.id} className={`bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4 ${!dish.available ? 'opacity-70' : ''}`}>
+                  <div key={dish.id} className={`bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4 ${!dish.available ? 'bg-gray-50 opacity-80' : ''}`}>
                       <img src={dish.image} alt={dish.name} className="w-24 h-24 object-cover rounded-lg bg-gray-100" />
                       <div className="flex-1">
                           <div className="flex justify-between items-start">
@@ -249,10 +294,11 @@ const Admin: React.FC = () => {
                           <p className="text-xs text-gray-400 mt-1 line-clamp-1">{dish.description}</p>
                           <div className="flex gap-2 mt-3 justify-end">
                               <button 
-                                onClick={() => toggleDishAvailability(dish.id)}
-                                className={`text-xs px-2 py-1 rounded border ${dish.available ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-300 text-gray-500 bg-gray-100'}`}
+                                onClick={() => toggleDishAvailability(dish.id, dish.available)}
+                                disabled={isSyncing}
+                                className={`text-xs px-2 py-1 rounded border transition-colors ${dish.available ? 'border-green-200 text-green-700 bg-green-50 hover:bg-green-100' : 'border-red-300 text-red-600 bg-red-50 hover:bg-red-100'}`}
                               >
-                                  {dish.available ? 'В меню' : 'Скрыто'}
+                                  {dish.available ? 'В меню (Доступно)' : 'СТОП-ЛИСТ (Скрыто)'}
                               </button>
                               <button onClick={() => openDishModal(dish)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded">
                                   <Edit2 size={16} />
@@ -315,10 +361,23 @@ const Admin: React.FC = () => {
      </div>
   );
 
+  if (!isAdmin) {
+    return (
+      <div className="text-center py-20">
+        <h2 className="text-2xl font-bold text-red-600">Доступ запрещен</h2>
+        <p className="text-gray-500">У вас нет прав администратора.</p>
+        <button onClick={() => navigate('/')} className="mt-4 text-amber-900 underline">Вернуться на главную</button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold text-amber-900">Админ-панель</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold text-amber-900">Админ-панель</h1>
+          {isSyncing && <RefreshCw size={20} className="animate-spin text-amber-600" />}
+        </div>
         <div className="flex bg-white p-1 rounded-xl shadow-sm border border-amber-100">
            {[
              { id: 'stats', label: 'Обзор', icon: Package },
@@ -404,9 +463,10 @@ const Admin: React.FC = () => {
               </div>
               <button 
                 onClick={saveDish}
-                className="w-full bg-amber-900 text-white py-3 rounded-lg font-bold hover:bg-amber-800 transition flex items-center justify-center gap-2"
+                disabled={isSyncing}
+                className="w-full bg-amber-900 text-white py-3 rounded-lg font-bold hover:bg-amber-800 transition flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                  <Save size={18} /> Сохранить
+                  <Save size={18} /> {isSyncing ? 'Сохранение...' : 'Сохранить в базу'}
               </button>
           </div>
       </Modal>

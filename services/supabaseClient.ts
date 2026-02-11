@@ -1,14 +1,33 @@
-import { createClient } from '@supabase/supabase-js';
 
-// NOTE: In a real app, these come from import.meta.env
-const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://mrdxugjmkeqwbakakvny.supabase.co';
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_wedvk7i162VwtrAXahtnOw_0Vpo2xeh';
+import { createClient } from '@supabase/supabase-js';
+import { Dish } from '../types';
+
+/**
+ * Safely retrieves environment variables from common sources (Vite, Node/Process).
+ * This prevents crashes in environments where import.meta.env is undefined.
+ */
+const getEnvVar = (key: string): string | undefined => {
+  try {
+    // Check for Vite-specific environment variables
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+      return (import.meta as any).env[key];
+    }
+    // Check for standard process.env (Node.js/CommonJS)
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env[key];
+    }
+  } catch (e) {
+    // Silently handle cases where properties are inaccessible
+  }
+  return undefined;
+};
+
+const supabaseUrl = getEnvVar('VITE_SUPABASE_URL') || 'https://your-project.supabase.co';
+const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY') || 'your-anon-key';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // --- MOCK DATA FOR DEMONSTRATION (If DB is not connected) ---
-import { Dish } from '../types';
-
 export const MOCK_DISHES: Dish[] = [
   {
     id: 1,
