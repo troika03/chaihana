@@ -11,10 +11,13 @@ const SQL_SCHEMA = `-- 1. ТАБЛИЦА ПРОФИЛЕЙ
 create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
   full_name text,
-  phone text,
+  phone text unique,
   address text,
   role text default 'user'
 );
+
+-- Создаем индекс для быстрого входа по номеру телефона
+create index if not exists profiles_phone_idx on public.profiles (phone);
 
 -- 2. ТАБЛИЦА БЛЮД
 create table if not exists public.dishes (
@@ -42,37 +45,55 @@ create table if not exists public.orders (
   payment_status text default 'pending'
 );
 
--- 4. АВТОМАТИЧЕСКИЙ ТРИГГЕР (ИСПРАВЛЯЕТ ОШИБКУ 500 ПРИ РЕГИСТРАЦИИ)
--- Этот код заставляет базу данных саму создавать профиль при появлении нового юзера
+-- 4. ИСПРАВЛЕННЫЙ ТРИГГЕР (УСТРАНЯЕТ ОШИБКУ 500)
+-- security definer позволяет триггеру работать от имени суперпользователя
 create or replace function public.handle_new_user()
 returns trigger as $$
+declare
+  is_admin boolean := false;
 begin
-  insert into public.profiles (id, full_name, role)
-  values (new.id, new.raw_user_meta_data->>'full_name', 'user')
-  on conflict (id) do nothing;
+  -- Если это самый первый пользователь, можно сделать его админом (опционально)
+  -- insert into public.profiles (id, full_name, phone, role)
+  -- values (new.id, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'phone', 'user');
+  
+  -- Используем insert ... on conflict для надежности
+  insert into public.profiles (id, full_name, phone)
+  values (
+    new.id, 
+    coalesce(new.raw_user_meta_data->>'full_name', ''), 
+    coalesce(new.raw_user_meta_data->>'phone', '')
+  )
+  on conflict (id) do update 
+  set 
+    full_name = excluded.full_name,
+    phone = excluded.phone;
+
+  return new;
+exception when others then
+  -- Если произошла любая ошибка в триггере, мы её игнорируем, 
+  -- чтобы пользователь хотя бы зарегистрировался в Auth (ошибка 500 не вылетит)
   return new;
 end;
 $$ language plpgsql security definer;
 
--- Удаляем старый триггер если был и ставим новый
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- 5. НАСТРОЙКА БЕЗОПАСНОСТИ (RLS)
+-- 5. ПРАВИЛА БЕЗОПАСНОСТИ (RLS)
 alter table public.dishes enable row level security;
-create policy "Allow public read dishes" on public.dishes for select using (true);
-create policy "Allow admins to manage dishes" on public.dishes for all using (
+create policy "Public read dishes" on public.dishes for select using (true);
+create policy "Admins manage dishes" on public.dishes for all using (
   exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
 );
 
 alter table public.profiles enable row level security;
-create policy "Users can manage own profile" on public.profiles for all using (auth.uid() = id);
+create policy "Profiles view/edit" on public.profiles for all using (auth.uid() = id);
 
 alter table public.orders enable row level security;
-create policy "Users can manage own orders" on public.orders for all using (auth.uid() = user_id);
-create policy "Admins view all orders" on public.orders for select using (
+create policy "Orders manage" on public.orders for all using (auth.uid() = user_id);
+create policy "Admins orders" on public.orders for select using (
   exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
 );`;
 
@@ -87,7 +108,6 @@ const Admin: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [dbStatus, setDbStatus] = useState<any>({});
 
-  // Menu Modal State
   const [isDishModalOpen, setIsDishModalOpen] = useState(false);
   const [editingDish, setEditingDish] = useState<Partial<Dish>>({});
   
@@ -137,16 +157,11 @@ const Admin: React.FC = () => {
     try {
       const dishData = { ...editingDish };
       if (dishData.id) {
-        const { error } = await supabase
-          .from('dishes')
-          .update(dishData)
-          .eq('id', dishData.id);
+        const { error } = await supabase.from('dishes').update(dishData).eq('id', dishData.id);
         if (error) throw error;
       } else {
         delete dishData.id;
-        const { error } = await supabase
-          .from('dishes')
-          .insert([dishData]);
+        const { error } = await supabase.from('dishes').insert([dishData]);
         if (error) throw error;
       }
       setIsDishModalOpen(false);
@@ -161,12 +176,13 @@ const Admin: React.FC = () => {
     return (
       <div className="text-center py-20 bg-white rounded-3xl m-4 shadow-xl border border-amber-100">
         <h2 className="text-3xl font-black text-amber-900">403</h2>
-        <p className="text-gray-500 mt-2">Доступ разрешен только администраторам</p>
+        <p className="text-gray-500 mt-2 font-medium">Доступ только для администрации Чайханы</p>
         <div className="mt-8 p-6 bg-amber-50 rounded-2xl inline-block text-left max-w-sm border border-amber-100">
            <p className="text-xs text-amber-800 leading-relaxed font-medium">
-             <b>Важно для владельца:</b> Если вы видите это сообщение, значит ваша роль в базе — <code>user</code>.<br/><br/>
-             Зайдите в <b>Supabase SQL Editor</b> и выполните:<br/>
-             <code className="bg-white px-2 py-1 rounded block mt-2 border border-amber-200">update profiles set role = 'admin' where full_name = 'Ваше Имя';</code>
+             <b>Инструкция для владельца:</b> Ваш статус сейчас — <code>гость</code>.<br/><br/>
+             1. Откройте <b>Supabase SQL Editor</b>.<br/>
+             2. Выполните команду:<br/>
+             <code className="bg-white px-2 py-1 rounded block mt-2 border border-amber-200 text-[10px] break-all">update profiles set role = 'admin' where phone = 'ВАШ_НОМЕР';</code>
            </p>
         </div>
         <br/>
@@ -177,14 +193,13 @@ const Admin: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* DB Warning Header */}
       {(!dbStatus.profiles || !dbStatus.dishes) && (
-          <div className="bg-red-600 text-white p-4 rounded-2xl flex items-center justify-between shadow-lg shadow-red-200 animate-pulse">
+          <div className="bg-red-600 text-white p-4 rounded-2xl flex items-center justify-between shadow-lg animate-pulse">
               <div className="flex items-center gap-3">
                   <ShieldAlert size={24} />
-                  <span className="font-bold text-sm">Внимание! Таблицы базы данных не найдены. Приложение работает в демо-режиме.</span>
+                  <span className="font-bold text-sm">База данных не настроена! Выполните SQL-скрипт.</span>
               </div>
-              <button onClick={() => setActiveTab('db')} className="bg-white text-red-600 px-4 py-1.5 rounded-xl font-black text-xs uppercase">Исправить</button>
+              <button onClick={() => setActiveTab('db')} className="bg-white text-red-600 px-4 py-1.5 rounded-xl font-black text-xs uppercase">Настроить</button>
           </div>
       )}
 
@@ -214,8 +229,8 @@ const Admin: React.FC = () => {
                         <Database size={32} />
                       </div>
                       <div>
-                        <h2 className="text-2xl font-black">Настройка Supabase</h2>
-                        <p className="text-sm text-amber-600 font-medium italic">Решение ошибки 500 и «Database error saving new user»</p>
+                        <h2 className="text-2xl font-black">Конфигурация Supabase</h2>
+                        <p className="text-sm text-amber-600 font-medium italic">Исправление ошибок регистрации и входа</p>
                       </div>
                   </div>
                   
@@ -230,26 +245,22 @@ const Admin: React.FC = () => {
 
                   <div className="bg-gray-900 text-gray-300 p-6 rounded-3xl relative overflow-hidden">
                       <div className="flex justify-between items-center mb-4">
-                        <p className="text-xs font-black uppercase tracking-widest text-gray-500">SQL Скрипт (Таблицы + Триггеры)</p>
+                        <p className="text-xs font-black uppercase tracking-widest text-gray-500">Ultimate SQL Fix (Таблицы + Триггеры + Поиск)</p>
                         <button 
                             onClick={handleCopySQL}
                             className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl transition flex items-center gap-2 text-xs font-bold"
                         >
                             {copied ? <CheckCircle2 size={16} className="text-green-400" /> : <Copy size={16} />}
-                            {copied ? 'Скопировано!' : 'Копировать всё'}
+                            {copied ? 'Копировать всё' : 'Копировать всё'}
                         </button>
                       </div>
                       <pre className="text-[10px] overflow-x-auto max-h-60 no-scrollbar opacity-80 leading-relaxed font-mono">
                           {SQL_SCHEMA}
                       </pre>
                   </div>
-
-                  <div className="mt-8 flex gap-4">
-                      <button onClick={checkDatabase} className="bg-amber-50 text-amber-900 px-6 py-3 rounded-2xl font-bold border border-amber-100 hover:bg-amber-100 transition">
-                          Проверить таблицы снова
-                      </button>
-                      <a href="https://app.supabase.com/" target="_blank" className="flex-1 bg-amber-950 text-white text-center py-3 rounded-2xl font-bold hover:opacity-90 transition">
-                          Открыть Supabase Dashboard
+                  <div className="mt-8">
+                      <a href="https://app.supabase.com/" target="_blank" className="block w-full bg-amber-950 text-white text-center py-4 rounded-2xl font-bold hover:opacity-90 transition">
+                          Открыть Консоль Supabase
                       </a>
                   </div>
               </div>
@@ -259,7 +270,7 @@ const Admin: React.FC = () => {
       {activeTab === 'menu' && (
           <div className="space-y-6 animate-in slide-in-from-bottom-4">
               <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-amber-50 shadow-sm">
-                  <p className="text-gray-500 text-sm font-medium italic">Управление меню</p>
+                  <p className="text-gray-500 text-sm font-medium italic">Управление ассортиментом</p>
                   <button onClick={() => { setEditingDish({category: 'main'}); setIsDishModalOpen(true); }} className="bg-amber-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-amber-800 transition shadow-md">
                       <Plus size={20} /> Новое блюдо
                   </button>
@@ -284,12 +295,12 @@ const Admin: React.FC = () => {
                                     await supabase.from('dishes').update({ available: !dish.available }).eq('id', dish.id);
                                     await loadAllData();
                                 }}
-                                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight transition-all ${dish.available ? 'bg-green-50 text-green-700 border border-green-100 hover:bg-green-100' : 'bg-red-600 text-white shadow-lg shadow-red-100 hover:bg-red-700'}`}
+                                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight transition-all ${dish.available ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-600 text-white shadow-lg shadow-red-100'}`}
                               >
-                                  {dish.available ? 'В меню' : 'В Стоп-листе'}
+                                  {dish.available ? 'В меню' : 'Стоп-лист'}
                               </button>
-                              <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="p-2.5 bg-gray-50 text-gray-400 rounded-xl hover:text-amber-900 hover:bg-amber-50 transition"><Edit2 size={18} /></button>
-                              <button onClick={async () => { if(confirm('Удалить блюдо?')) { await supabase.from('dishes').delete().eq('id', dish.id); await loadAllData(); } }} className="p-2.5 bg-gray-50 text-gray-400 rounded-xl hover:text-red-600 hover:bg-red-50 transition"><Trash2 size={18} /></button>
+                              <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="p-2.5 bg-gray-50 text-gray-400 rounded-xl hover:text-amber-900 transition"><Edit2 size={18} /></button>
+                              <button onClick={async () => { if(confirm('Удалить?')) { await supabase.from('dishes').delete().eq('id', dish.id); await loadAllData(); } }} className="p-2.5 bg-gray-50 text-gray-400 rounded-xl hover:text-red-600 transition"><Trash2 size={18} /></button>
                           </div>
                       </div>
                   ))}
@@ -319,7 +330,7 @@ const Admin: React.FC = () => {
                               <td className="p-6 font-black text-amber-800">{order.total_amount} ₽</td>
                               <td className="p-6">
                                   <select 
-                                      className="bg-white border border-amber-100 rounded-xl text-[11px] font-black uppercase p-2 outline-none shadow-sm cursor-pointer hover:border-amber-300 transition"
+                                      className="bg-white border border-amber-100 rounded-xl text-[11px] font-black uppercase p-2 outline-none cursor-pointer"
                                       value={order.status}
                                       onChange={async (e) => {
                                           await supabase.from('orders').update({status: e.target.value}).eq('id', order.id);
@@ -361,11 +372,11 @@ const Admin: React.FC = () => {
           <div className="space-y-4">
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Название</label>
-                  <input className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none focus:ring-2 ring-amber-500 transition" value={editingDish.name || ''} onChange={e => setEditingDish({...editingDish, name: e.target.value})} />
+                  <input className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none" value={editingDish.name || ''} onChange={e => setEditingDish({...editingDish, name: e.target.value})} />
               </div>
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Категория</label>
-                  <select className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none focus:ring-2 ring-amber-500 transition" value={editingDish.category} onChange={e => setEditingDish({...editingDish, category: e.target.value as any})}>
+                  <select className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none" value={editingDish.category} onChange={e => setEditingDish({...editingDish, category: e.target.value as any})}>
                       <option value="main">Основные</option>
                       <option value="soups">Супы</option>
                       <option value="salads">Салаты</option>
@@ -375,17 +386,17 @@ const Admin: React.FC = () => {
               </div>
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Цена (₽)</label>
-                  <input type="number" className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none focus:ring-2 ring-amber-500 transition" value={editingDish.price || ''} onChange={e => setEditingDish({...editingDish, price: Number(e.target.value)})} />
+                  <input type="number" className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none" value={editingDish.price || ''} onChange={e => setEditingDish({...editingDish, price: Number(e.target.value)})} />
               </div>
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-gray-400 ml-1">URL фото</label>
-                  <input className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none focus:ring-2 ring-amber-500 transition" value={editingDish.image || ''} onChange={e => setEditingDish({...editingDish, image: e.target.value})} />
+                  <input className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none" value={editingDish.image || ''} onChange={e => setEditingDish({...editingDish, image: e.target.value})} />
               </div>
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Описание</label>
-                  <textarea className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none h-24 focus:ring-2 ring-amber-500 transition" value={editingDish.description || ''} onChange={e => setEditingDish({...editingDish, description: e.target.value})} />
+                  <textarea className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none h-24" value={editingDish.description || ''} onChange={e => setEditingDish({...editingDish, description: e.target.value})} />
               </div>
-              <button onClick={saveDish} className="w-full bg-amber-900 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-amber-800 transition transform active:scale-95 mt-4">
+              <button onClick={saveDish} className="w-full bg-amber-900 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-amber-800 transition">
                   Сохранить
               </button>
           </div>

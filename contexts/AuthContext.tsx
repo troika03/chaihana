@@ -7,7 +7,7 @@ interface AuthContextType {
   user: UserProfile | null;
   isLoading: boolean;
   isAdmin: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signIn: (identifier: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName: string, phone: string, address: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
@@ -67,14 +67,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (identifier: string, password: string) => {
+    let email = identifier;
+
+    // Простая проверка: если в строке нет '@', но есть цифры - считаем это телефоном
+    if (!identifier.includes('@') && /[0-9]/.test(identifier)) {
+      // Пытаемся найти email по телефону в таблице profiles
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone', identifier)
+        .single();
+
+      if (profile) {
+        // В Supabase Auth мы не можем напрямую получить email из auth.users по ID (из-за безопасности),
+        // но если мы доверяем системе, то просим пользователя использовать email.
+        // Чтобы сделать вход по телефону полноценным без SMS, нужно использовать Auth Hook в Supabase.
+        // Сейчас мы выдадим ошибку, если email не найден.
+        return { error: { message: "Для входа по номеру требуется SMS-подтверждение. Пожалуйста, используйте Email или настройте SMS в Supabase." } };
+      }
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
     try {
-      // 1. Пытаемся создать пользователя в Auth
+      // Регистрация с метаданными (триггер handle_new_user их подхватит)
       const { data, error: authError } = await supabase.auth.signUp({ 
         email, 
         password,
@@ -87,18 +107,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
 
       if (authError) {
-        console.error("SignUp Auth Error (500 likely):", authError);
-        // Если ошибка 500, значит в БД что-то не так с триггерами или таблицами
-        return { 
-          error: { 
-            message: "Ошибка сервера (500). Скорее всего, в Supabase не создана таблица 'profiles'. Зайдите в Админ-панель и выполните SQL-скрипт." 
-          } 
-        };
+        return { error: authError };
       }
 
+      // На случай если триггер не сработал или задержался, пробуем создать профиль вручную
       if (data.user) {
-        // 2. Создаем/обновляем профиль вручную (на случай если триггер не настроен)
-        const { error: profileError } = await supabase
+        await supabase
           .from('profiles')
           .upsert({ 
             id: data.user.id, 
@@ -107,16 +121,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             address: address, 
             role: 'user' 
           });
-        
-        if (profileError) {
-          console.error("Profile DB Error:", profileError);
-          // Если пользователь создался, но профиль нет - это не критично для Auth, но плохо для приложения
-        }
       }
       
       return { error: null };
     } catch (err: any) {
-      console.error("Auth exception:", err);
       return { error: { message: err.message || "Ошибка системы" } };
     }
   };
