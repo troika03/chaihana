@@ -22,8 +22,8 @@ const getEnvVar = (key: string): string | undefined => {
   return undefined;
 };
 
-const supabaseUrl = getEnvVar('VITE_SUPABASE_URL') || 'https://your-project.supabase.co';
-const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY') || 'your-anon-key';
+const supabaseUrl = getEnvVar('VITE_SUPABASE_URL') || 'https://mrdxugjmkeqwbakakvny.supabase.co';
+const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY') || 'sb_secret_bWMferCMNyZxInoGMR-PTg_j66qGdcv';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
