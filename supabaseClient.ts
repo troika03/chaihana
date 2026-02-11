@@ -1,11 +1,10 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { Dish } from './pages/types';
 
 // Данные вашего проекта Supabase
 const supabaseUrl = 'https://mrdxugjmkeqwbakakvny.supabase.co';
-// Используем новый предоставленный секретный ключ
-const supabaseKey = 'sb_secret_bWMferCMNyZxInoGMR-PTg_j66qGdcv'; 
+// Используем новый предоставленный секретный ключ (JWT)
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yZHh1Z2pta2Vxd2Jha2Frdm55Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDcwOTM1NywiZXhwIjoyMDg2Mjg1MzU3fQ._-oTsr4MWfAiYnvtW-uOQWvkJRdMVI4K4R75OiZA89k'; 
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {

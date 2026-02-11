@@ -1,11 +1,10 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trash2, CreditCard, Wallet, ArrowRight, Minus, Plus } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { createPayment } from '../services/paymentService';
-import { supabase } from '../services/supabaseClient';
+import { supabase } from '../supabaseClient';
 
 const Checkout: React.FC = () => {
   const { items, updateQuantity, removeFromCart, totalAmount, clearCart } = useCart();
