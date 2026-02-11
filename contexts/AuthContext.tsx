@@ -57,9 +57,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (!error && data) {
         setUser(data as UserProfile);
+      } else if (error) {
+        console.error('Error fetching profile from DB:', error.message);
       }
     } catch (err) {
-      console.error('Error fetching profile:', err);
+      console.error('Error in fetchProfile:', err);
     } finally {
       setIsLoading(false);
     }
@@ -67,28 +69,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) console.error("Sign in error:", error.message);
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
-    const { data, error: authError } = await supabase.auth.signUp({ email, password });
+    try {
+      const { data, error: authError } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          data: { full_name: fullName } // Сохраняем имя также в метаданные auth
+        }
+      });
 
-    if (authError) return { error: authError };
+      if (authError) {
+        console.error("Supabase Auth Error:", authError.message);
+        return { error: authError };
+      }
 
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([{ 
-          id: data.user.id, 
-          full_name: fullName, 
-          phone, 
-          address, 
-          role: 'user' 
-        }]);
-      return { error: profileError };
+      if (data.user) {
+        // Создаем запись в таблице profiles
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert([{ 
+            id: data.user.id, 
+            full_name: fullName, 
+            phone, 
+            address, 
+            role: 'user' 
+          }]);
+        
+        if (profileError) {
+          console.error("Database Profile Error:", profileError.message);
+          // Если ошибка в таблице, возвращаем более понятный текст
+          if (profileError.message.includes("relation \"profiles\" does not exist")) {
+            return { error: { message: "Ошибка: Таблица 'profiles' не создана в Supabase. Выполните SQL-скрипт из types.ts" } };
+          }
+          return { error: profileError };
+        }
+      }
+      
+      return { error: null };
+    } catch (err: any) {
+      console.error("System SignUp Error:", err);
+      return { error: { message: err.message || "Неизвестная ошибка при регистрации" } };
     }
-    
-    return { error: null };
   };
 
   const signOut = async () => {

@@ -36,13 +36,18 @@ const Home: React.FC = () => {
         .select('*')
         .order('name', { ascending: true });
 
-      if (!error && data && data.length > 0) {
+      if (error) {
+        console.error('Supabase Dishes Fetch Error:', error.message);
+        console.warn('Using mock data due to database error');
+        setDishes(MOCK_DISHES);
+      } else if (data && data.length > 0) {
         setDishes(data);
       } else {
-        console.warn('DB empty or error, using mock data');
+        console.warn('Database table "dishes" is empty, using mock data');
         setDishes(MOCK_DISHES);
       }
-    } catch (e) {
+    } catch (e: any) {
+      console.error('System Fetch Error:', e.message);
       setDishes(MOCK_DISHES);
     }
     setIsLoading(false);
