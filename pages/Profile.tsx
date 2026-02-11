@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../services/supabaseClient';
+import { supabase } from '../supabaseClient';
 import { LogOut, User as UserIcon, MapPin, Phone, Mail, Package, Lock, Loader2 } from 'lucide-react';
 
 const Profile: React.FC = () => {

@@ -1,5 +1,6 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { CartItem, Dish } from '../types';
+import { CartItem, Dish } from '../pages/types';
 
 interface CartContextType {
   items: CartItem[];
@@ -67,9 +68,11 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, totalAmount, totalItems }}>
-      {children}
-    </CartContext.Provider>
+    <div style={{ display: 'contents' }}>
+      <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, totalAmount, totalItems }}>
+        {children}
+      </CartContext.Provider>
+    </div>
   );
 };
 

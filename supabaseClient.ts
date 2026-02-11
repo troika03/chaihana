@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { Dish } from './types';
+import { Dish } from './pages/types';
 
 // Данные вашего проекта Supabase
 const supabaseUrl = 'https://mrdxugjmkeqwbakakvny.supabase.co';

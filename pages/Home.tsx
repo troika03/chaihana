@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { supabase, MOCK_DISHES } from '../supabaseClient';
-import { Dish } from '../types';
+import { Dish } from './types';
 import { useCart } from '../contexts/CartContext';
 import Modal from '../components/ui/Modal';
 

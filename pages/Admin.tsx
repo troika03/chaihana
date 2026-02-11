@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase, MOCK_DISHES } from '../supabaseClient';
-import { Order, Courier, Dish } from '../types';
+import { Order, Courier, Dish } from './types';
 import { Package, Users, Truck, UtensilsCrossed, CheckCircle, Clock, Plus, Edit2, Trash2, X, Save, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
