@@ -1,14 +1,14 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../services/supabaseClient';
+import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
 interface AuthContextType {
   user: UserProfile | null;
   isLoading: boolean;
   isAdmin: boolean;
-  signIn: (phone: string, password: string) => Promise<{ error: any }>;
-  signUp: (phone: string, password: string, fullName: string, address: string) => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, phone: string, address: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -19,19 +19,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Получаем текущую сессию
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        fetchProfile(session.user.id);
-      } else {
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await fetchProfile(session.user.id);
+        } else {
+          setIsLoading(false);
+        }
+      } catch (e) {
+        console.error("Auth init error", e);
         setIsLoading(false);
       }
-    });
+    };
 
-    // Подписываемся на изменения состояния
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        fetchProfile(session.user.id);
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await fetchProfile(session.user.id);
       } else {
         setUser(null);
         setIsLoading(false);
@@ -42,34 +48,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const fetchProfile = async (uid: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', uid)
-      .single();
-    
-    if (!error && data) {
-      setUser(data as UserProfile);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', uid)
+        .single();
+      
+      if (!error && data) {
+        setUser(data as UserProfile);
+      }
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
-  const signIn = async (phone: string, password: string) => {
-    // В Supabase Auth чаще используется email, для примера имитируем его через телефон
-    const email = `${phone.replace(/[^0-9]/g, '')}@zhulebino.ru`;
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
   };
 
-  const signUp = async (phone: string, password: string, fullName: string, address: string) => {
-    const email = `${phone.replace(/[^0-9]/g, '')}@zhulebino.ru`;
-    const { data, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+  const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
+    const { data, error: authError } = await supabase.auth.signUp({ email, password });
 
     if (authError) return { error: authError };
 

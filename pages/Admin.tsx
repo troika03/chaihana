@@ -1,18 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { supabase, MOCK_DISHES } from '../services/supabaseClient';
+import { supabase, MOCK_DISHES } from '../supabaseClient';
 import { Order, Courier, Dish } from '../types';
 import { Package, Users, Truck, UtensilsCrossed, CheckCircle, Clock, Plus, Edit2, Trash2, X, Save, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from '../components/ui/Modal';
-
-// --- MOCK COURIERS DATA (Still using local for demo, but dishes moved to DB) ---
-const MOCK_COURIERS: Courier[] = [
-    { id: 1, name: "Алишер", phone: "+79001112233", vehicle: "Велосипед", status: "available" },
-    { id: 2, name: "Борис", phone: "+79004445566", vehicle: "Авто", status: "busy" },
-    { id: 3, name: "Фарход", phone: "+79007778899", vehicle: "Скутер", status: "offline" }
-];
 
 const Admin: React.FC = () => {
   const { isAdmin, user } = useAuth();
@@ -26,22 +19,24 @@ const Admin: React.FC = () => {
   // Menu Modal State
   const [isDishModalOpen, setIsDishModalOpen] = useState(false);
   const [editingDish, setEditingDish] = useState<Partial<Dish>>({});
-
-  // Courier Modal State
-  const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
-  const [editingCourier, setEditingCourier] = useState<Partial<Courier>>({});
   
   useEffect(() => {
-    loadAllData();
+    if (isAdmin) {
+        loadAllData();
+    }
   }, [isAdmin]);
 
   const loadAllData = async () => {
     setIsSyncing(true);
-    // 1. Load Orders (From localStorage for now as per current structure, but could be Supabase)
-    const savedOrders = localStorage.getItem('zhulebino_orders');
-    if (savedOrders) setOrders(JSON.parse(savedOrders));
+    
+    // 1. Загрузка заказов из БД
+    const { data: dbOrders } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (dbOrders) setOrders(dbOrders as any);
 
-    // 2. Load Dishes from Supabase (CRITICAL FIX)
+    // 2. Загрузка блюд (СТОП-ЛИСТ СИНХРОНИЗИРОВАН ТУТ)
     const { data: dbDishes, error } = await supabase
       .from('dishes')
       .select('*')
@@ -50,78 +45,14 @@ const Admin: React.FC = () => {
     if (!error && dbDishes && dbDishes.length > 0) {
       setDishes(dbDishes);
     } else {
-      // Fallback if DB empty
       setDishes(MOCK_DISHES);
     }
 
-    // 3. Load Couriers
-    const savedCouriers = localStorage.getItem('zhulebino_couriers');
-    if (savedCouriers) {
-        setCouriers(JSON.parse(savedCouriers));
-    } else {
-        setCouriers(MOCK_COURIERS);
-    }
+    // 3. Курьеры
+    const { data: dbCouriers } = await supabase.from('couriers').select('*');
+    if (dbCouriers) setCouriers(dbCouriers as any);
+
     setIsSyncing(false);
-  };
-
-  // --- ORDER HANDLERS ---
-  const updateOrderStatus = (id: number, status: string) => {
-    const updated = orders.map(o => o.id === id ? { ...o, status } : o) as Order[];
-    setOrders(updated);
-    localStorage.setItem('zhulebino_orders', JSON.stringify(updated));
-  };
-
-  // --- DISH HANDLERS (SUPABASE SYNCED) ---
-  const saveDish = async () => {
-      setIsSyncing(true);
-      if (editingDish.id) {
-          // Update existing in DB
-          const { error } = await supabase
-            .from('dishes')
-            .update({
-              name: editingDish.name,
-              category: editingDish.category,
-              price: editingDish.price,
-              image: editingDish.image,
-              description: editingDish.description,
-              available: editingDish.available
-            })
-            .eq('id', editingDish.id);
-          
-          if (error) alert("Ошибка обновления: " + error.message);
-      } else {
-          // Insert new to DB
-          const { error } = await supabase
-            .from('dishes')
-            .insert([{ 
-              name: editingDish.name,
-              category: editingDish.category,
-              price: editingDish.price,
-              image: editingDish.image,
-              description: editingDish.description,
-              available: true 
-            }]);
-          
-          if (error) alert("Ошибка создания: " + error.message);
-      }
-      
-      await loadAllData(); // Refresh list from DB
-      setIsDishModalOpen(false);
-      setIsSyncing(false);
-  };
-
-  const deleteDish = async (id: number) => {
-      if(window.confirm('Вы уверены, что хотите удалить это блюдо из базы данных?')) {
-        setIsSyncing(true);
-        const { error } = await supabase
-          .from('dishes')
-          .delete()
-          .eq('id', id);
-        
-        if (error) alert("Ошибка удаления: " + error.message);
-        await loadAllData();
-        setIsSyncing(false);
-      }
   };
 
   const toggleDishAvailability = async (id: number, currentStatus: boolean) => {
@@ -132,397 +63,181 @@ const Admin: React.FC = () => {
         .eq('id', id);
       
       if (error) {
-        alert("Ошибка стоп-листа: " + error.message);
+        alert("Ошибка обновления базы: " + error.message);
       } else {
-        // Update local state immediately for UX
+        // Локальное обновление для скорости интерфейса
         setDishes(dishes.map(d => d.id === id ? { ...d, available: !currentStatus } : d));
       }
       setIsSyncing(false);
   };
 
-  const openDishModal = (dish?: Dish) => {
-      setEditingDish(dish || { category: 'main', image: 'https://picsum.photos/400/300' });
-      setIsDishModalOpen(true);
-  };
+  const saveDish = async () => {
+      setIsSyncing(true);
+      const dishData = {
+          name: editingDish.name,
+          category: editingDish.category,
+          price: editingDish.price,
+          image: editingDish.image,
+          description: editingDish.description,
+          available: editingDish.id ? editingDish.available : true
+      };
 
-  // --- COURIER HANDLERS (STILL LOCAL FOR NOW) ---
-   const saveCourier = () => {
-      let updatedCouriers = [...couriers];
-      if (editingCourier.id) {
-          updatedCouriers = updatedCouriers.map(c => c.id === editingCourier.id ? { ...c, ...editingCourier } as Courier : c);
+      if (editingDish.id) {
+          const { error } = await supabase
+            .from('dishes')
+            .update(dishData)
+            .eq('id', editingDish.id);
+          if (error) alert(error.message);
       } else {
-          const newCourier = { ...editingCourier, id: Date.now(), status: 'available' } as Courier;
-          updatedCouriers.push(newCourier);
+          const { error } = await supabase
+            .from('dishes')
+            .insert([dishData]);
+          if (error) alert(error.message);
       }
-      setCouriers(updatedCouriers);
-      localStorage.setItem('zhulebino_couriers', JSON.stringify(updatedCouriers));
-      setIsCourierModalOpen(false);
+      
+      await loadAllData();
+      setIsDishModalOpen(false);
   };
 
-  const deleteCourier = (id: number) => {
-      if(window.confirm('Удалить курьера?')) {
-          const updated = couriers.filter(c => c.id !== id);
-          setCouriers(updated);
-          localStorage.setItem('zhulebino_couriers', JSON.stringify(updated));
+  const deleteDish = async (id: number) => {
+      if(window.confirm('Удалить блюдо безвозвратно?')) {
+        await supabase.from('dishes').delete().eq('id', id);
+        await loadAllData();
       }
   };
-
-  const openCourierModal = (courier?: Courier) => {
-      setEditingCourier(courier || { status: 'available' });
-      setIsCourierModalOpen(true);
-  };
-
-
-  const stats = {
-    total: orders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0),
-    count: orders.length,
-    active: orders.filter(o => ['pending', 'cooking', 'delivering'].includes(o.status || 'pending')).length
-  };
-
-  // --- RENDER SECTIONS ---
-
-  const renderStats = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in">
-      <div className="bg-gradient-to-br from-amber-600 to-amber-800 text-white p-6 rounded-2xl shadow-lg">
-        <div className="flex justify-between items-start">
-          <div>
-             <p className="text-amber-200 text-sm font-medium mb-1">Выручка</p>
-             <h3 className="text-3xl font-bold">{stats.total.toLocaleString()} ₽</h3>
-          </div>
-          <div className="bg-white/20 p-2 rounded-lg"><Package size={24} /></div>
-        </div>
-      </div>
-       <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
-        <div className="flex justify-between items-start">
-          <div>
-             <p className="text-gray-400 text-sm font-medium mb-1">Всего заказов</p>
-             <h3 className="text-3xl font-bold text-gray-800">{stats.count}</h3>
-          </div>
-          <div className="bg-amber-100 text-amber-800 p-2 rounded-lg"><Users size={24} /></div>
-        </div>
-      </div>
-       <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
-        <div className="flex justify-between items-start">
-          <div>
-             <p className="text-gray-400 text-sm font-medium mb-1">Активные заказы</p>
-             <h3 className="text-3xl font-bold text-orange-600">{stats.active}</h3>
-          </div>
-          <div className="bg-orange-100 text-orange-600 p-2 rounded-lg"><Clock size={24} /></div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderOrders = () => (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 text-sm uppercase">
-              <th className="p-4 font-semibold">ID</th>
-              <th className="p-4 font-semibold">Клиент</th>
-              <th className="p-4 font-semibold">Сумма</th>
-              <th className="p-4 font-semibold">Статус</th>
-              <th className="p-4 font-semibold">Действия</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {orders.length === 0 ? (
-               <tr><td colSpan={5} className="p-8 text-center text-gray-500">Нет заказов</td></tr>
-            ) : orders.map(order => (
-              <tr key={order.id} className="hover:bg-gray-50 transition">
-                <td className="p-4 font-mono text-sm">#{order.id.toString().slice(-6)}</td>
-                <td className="p-4">
-                  <div className="font-medium text-gray-800">{order.contact_phone || order.phone}</div>
-                  <div className="text-xs text-gray-500 truncate max-w-[150px]">{order.delivery_address || order.address}</div>
-                </td>
-                <td className="p-4 font-bold text-gray-700">{order.total || order.total_amount} ₽</td>
-                <td className="p-4">
-                   <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                     (order.status || 'pending') === 'delivered' ? 'bg-green-100 text-green-700' :
-                     (order.status || 'pending') === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                     'bg-blue-100 text-blue-700'
-                   }`}>
-                     {order.status || 'pending'}
-                   </span>
-                </td>
-                <td className="p-4">
-                  <select 
-                    value={order.status || 'pending'}
-                    onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                    className="text-sm border rounded p-1"
-                  >
-                    <option value="pending">Ожидание</option>
-                    <option value="cooking">Готовится</option>
-                    <option value="delivering">В пути</option>
-                    <option value="delivered">Доставлен</option>
-                    <option value="cancelled">Отмена</option>
-                  </select>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-
-  const renderMenu = () => (
-      <div className="space-y-4">
-          <div className="flex justify-between items-center">
-              <p className="text-sm text-gray-500 italic">Данные синхронизированы с базой Supabase</p>
-              <button 
-                onClick={() => openDishModal()} 
-                disabled={isSyncing}
-                className="bg-amber-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-800 transition shadow disabled:opacity-50"
-              >
-                  <Plus size={20} /> Добавить блюдо
-              </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {dishes.map(dish => (
-                  <div key={dish.id} className={`bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4 ${!dish.available ? 'bg-gray-50 opacity-80' : ''}`}>
-                      <img src={dish.image} alt={dish.name} className="w-24 h-24 object-cover rounded-lg bg-gray-100" />
-                      <div className="flex-1">
-                          <div className="flex justify-between items-start">
-                              <div>
-                                  <h3 className="font-bold text-gray-800">{dish.name}</h3>
-                                  <p className="text-sm text-gray-500">{dish.category}</p>
-                              </div>
-                              <span className="font-bold text-amber-700">{dish.price} ₽</span>
-                          </div>
-                          <p className="text-xs text-gray-400 mt-1 line-clamp-1">{dish.description}</p>
-                          <div className="flex gap-2 mt-3 justify-end">
-                              <button 
-                                onClick={() => toggleDishAvailability(dish.id, dish.available)}
-                                disabled={isSyncing}
-                                className={`text-xs px-2 py-1 rounded border transition-colors ${dish.available ? 'border-green-200 text-green-700 bg-green-50 hover:bg-green-100' : 'border-red-300 text-red-600 bg-red-50 hover:bg-red-100'}`}
-                              >
-                                  {dish.available ? 'В меню (Доступно)' : 'СТОП-ЛИСТ (Скрыто)'}
-                              </button>
-                              <button onClick={() => openDishModal(dish)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded">
-                                  <Edit2 size={16} />
-                              </button>
-                              <button onClick={() => deleteDish(dish.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded">
-                                  <Trash2 size={16} />
-                              </button>
-                          </div>
-                      </div>
-                  </div>
-              ))}
-          </div>
-      </div>
-  );
-
-  const renderCouriers = () => (
-     <div className="space-y-4">
-         <div className="flex justify-end">
-              <button 
-                onClick={() => openCourierModal()} 
-                className="bg-amber-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-800 transition shadow"
-              >
-                  <Plus size={20} /> Добавить курьера
-              </button>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-             <table className="w-full text-left">
-                 <thead className="bg-gray-50 text-gray-500 text-sm">
-                     <tr>
-                         <th className="p-4">Имя</th>
-                         <th className="p-4">Телефон</th>
-                         <th className="p-4">Транспорт</th>
-                         <th className="p-4">Статус</th>
-                         <th className="p-4 text-right">Действия</th>
-                     </tr>
-                 </thead>
-                 <tbody className="divide-y divide-gray-100">
-                     {couriers.map(courier => (
-                         <tr key={courier.id}>
-                             <td className="p-4 font-medium">{courier.name}</td>
-                             <td className="p-4 text-gray-600">{courier.phone}</td>
-                             <td className="p-4">{courier.vehicle}</td>
-                             <td className="p-4">
-                                 <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                     courier.status === 'available' ? 'bg-green-100 text-green-700' :
-                                     courier.status === 'busy' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'
-                                 }`}>
-                                     {courier.status === 'available' ? 'Свободен' : courier.status === 'busy' ? 'Занят' : 'Оффлайн'}
-                                 </span>
-                             </td>
-                             <td className="p-4 text-right space-x-2">
-                                 <button onClick={() => openCourierModal(courier)} className="text-blue-600 hover:text-blue-800"><Edit2 size={18} /></button>
-                                 <button onClick={() => deleteCourier(courier.id)} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>
-                             </td>
-                         </tr>
-                     ))}
-                 </tbody>
-             </table>
-          </div>
-     </div>
-  );
 
   if (!isAdmin) {
     return (
-      <div className="text-center py-20">
-        <h2 className="text-2xl font-bold text-red-600">Доступ запрещен</h2>
-        <p className="text-gray-500">У вас нет прав администратора.</p>
-        <button onClick={() => navigate('/')} className="mt-4 text-amber-900 underline">Вернуться на главную</button>
+      <div className="text-center py-20 bg-white rounded-3xl m-4 shadow-xl">
+        <h2 className="text-3xl font-black text-red-600">403</h2>
+        <p className="text-gray-500 mt-2">Доступ только для администраторов</p>
+        <button onClick={() => navigate('/')} className="mt-6 bg-amber-900 text-white px-8 py-3 rounded-2xl font-bold">На главную</button>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold text-amber-900">Админ-панель</h1>
-          {isSyncing && <RefreshCw size={20} className="animate-spin text-amber-600" />}
-        </div>
-        <div className="flex bg-white p-1 rounded-xl shadow-sm border border-amber-100">
-           {[
-             { id: 'stats', label: 'Обзор', icon: Package },
-             { id: 'orders', label: 'Заказы', icon: CheckCircle },
-             { id: 'couriers', label: 'Курьеры', icon: Truck },
-             { id: 'menu', label: 'Меню', icon: UtensilsCrossed },
-           ].map(tab => (
-             <button
-               key={tab.id}
-               onClick={() => setActiveTab(tab.id as any)}
-               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
-                 activeTab === tab.id ? 'bg-amber-100 text-amber-900' : 'text-gray-500 hover:text-amber-800'
-               }`}
-             >
-               <tab.icon size={16} />
-               <span className="hidden sm:inline">{tab.label}</span>
-             </button>
-           ))}
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-black text-amber-950 flex items-center gap-3">
+            Админ-центр
+            {isSyncing && <RefreshCw className="animate-spin text-amber-600" size={24} />}
+        </h1>
+        <div className="bg-white p-1 rounded-2xl shadow-sm border border-amber-50 flex">
+            {['stats', 'orders', 'menu'].map(tab => (
+                <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab as any)}
+                    className={`px-6 py-2 rounded-xl text-sm font-bold transition ${activeTab === tab ? 'bg-amber-900 text-white shadow-lg' : 'text-gray-400 hover:text-amber-900'}`}
+                >
+                    {tab === 'stats' ? 'Дашборд' : tab === 'orders' ? 'Заказы' : 'Меню'}
+                </button>
+            ))}
         </div>
       </div>
 
-      {activeTab === 'stats' && renderStats()}
-      {activeTab === 'orders' && renderOrders()}
-      {activeTab === 'couriers' && renderCouriers()}
-      {activeTab === 'menu' && renderMenu()}
+      {activeTab === 'menu' && (
+          <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-amber-50 shadow-sm">
+                  <p className="text-gray-500 text-sm font-medium italic">Управляйте доступностью блюд в реальном времени</p>
+                  <button onClick={() => { setEditingDish({category: 'main'}); setIsDishModalOpen(true); }} className="bg-amber-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-amber-800 transition">
+                      <Plus size={20} /> Добавить
+                  </button>
+              </div>
 
-      {/* DISH EDIT MODAL */}
-      <Modal 
-        isOpen={isDishModalOpen} 
-        onClose={() => setIsDishModalOpen(false)}
-        title={editingDish.id ? "Редактировать блюдо" : "Новое блюдо"}
-      >
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {dishes.map(dish => (
+                      <div key={dish.id} className={`bg-white p-4 rounded-2xl border border-amber-50 shadow-sm flex flex-col justify-between transition ${!dish.available ? 'bg-gray-50/80 grayscale' : ''}`}>
+                          <div className="flex gap-4">
+                              <img src={dish.image} className="w-20 h-20 object-cover rounded-xl bg-gray-100" />
+                              <div className="flex-1">
+                                  <h3 className="font-black text-amber-950">{dish.name}</h3>
+                                  <p className="text-xs text-amber-700 font-bold uppercase tracking-widest">{dish.category}</p>
+                                  <p className="text-lg font-black text-gray-900 mt-1">{dish.price} ₽</p>
+                              </div>
+                          </div>
+                          
+                          <div className="flex gap-2 mt-4 pt-4 border-t border-amber-50">
+                              <button 
+                                onClick={() => toggleDishAvailability(dish.id, dish.available)}
+                                disabled={isSyncing}
+                                className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-tighter transition ${dish.available ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-600 text-white shadow-lg shadow-red-200'}`}
+                              >
+                                  {dish.available ? 'В меню' : 'В СТОП-ЛИСТЕ'}
+                              </button>
+                              <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="p-2 bg-gray-50 text-gray-400 rounded-xl hover:text-blue-600 transition"><Edit2 size={18} /></button>
+                              <button onClick={() => deleteDish(dish.id)} className="p-2 bg-gray-50 text-gray-400 rounded-xl hover:text-red-600 transition"><Trash2 size={18} /></button>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      )}
+
+      {activeTab === 'orders' && (
+          <div className="bg-white rounded-3xl shadow-sm border border-amber-50 overflow-hidden">
+              <table className="w-full text-left">
+                  <thead className="bg-amber-50/50 text-amber-900 text-xs font-black uppercase tracking-widest">
+                      <tr>
+                          <th className="p-5">Заказ</th>
+                          <th className="p-5">Клиент</th>
+                          <th className="p-5">Сумма</th>
+                          <th className="p-5">Статус</th>
+                          <th className="p-5">Действие</th>
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-50">
+                      {orders.map(order => (
+                          <tr key={order.id} className="hover:bg-amber-50/20 transition">
+                              <td className="p-5 font-black text-amber-950">#{order.id}</td>
+                              <td className="p-5">
+                                  <div className="font-bold text-gray-800">{order.contact_phone}</div>
+                                  <div className="text-xs text-gray-400 truncate max-w-[200px]">{order.delivery_address}</div>
+                              </td>
+                              <td className="p-5 font-black text-amber-800">{order.total_amount} ₽</td>
+                              <td className="p-5">
+                                  <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${order.status === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                      {order.status}
+                                  </span>
+                              </td>
+                              <td className="p-5">
+                                  <select 
+                                      className="bg-white border-2 border-amber-100 rounded-xl text-xs font-bold p-1 outline-none"
+                                      value={order.status}
+                                      onChange={async (e) => {
+                                          await supabase.from('orders').update({status: e.target.value}).eq('id', order.id);
+                                          loadAllData();
+                                      }}
+                                  >
+                                      <option value="pending">Ожидание</option>
+                                      <option value="cooking">Готовится</option>
+                                      <option value="delivering">Доставка</option>
+                                      <option value="delivered">Готово</option>
+                                  </select>
+                              </td>
+                          </tr>
+                      ))}
+                  </tbody>
+              </table>
+          </div>
+      )}
+
+      <Modal isOpen={isDishModalOpen} onClose={() => setIsDishModalOpen(false)} title={editingDish.id ? 'Изменить блюдо' : 'Новое блюдо'}>
           <div className="space-y-4">
-              <div>
-                  <label className="block text-sm font-medium text-gray-700">Название</label>
-                  <input 
-                    className="w-full p-2 border rounded mt-1" 
-                    value={editingDish.name || ''} 
-                    onChange={e => setEditingDish({...editingDish, name: e.target.value})}
-                  />
-              </div>
-              <div>
-                  <label className="block text-sm font-medium text-gray-700">Категория</label>
-                  <select 
-                    className="w-full p-2 border rounded mt-1"
-                    value={editingDish.category || 'main'}
-                    onChange={e => setEditingDish({...editingDish, category: e.target.value as any})}
-                  >
-                      <option value="main">Основные</option>
-                      <option value="soups">Супы</option>
-                      <option value="salads">Салаты</option>
-                      <option value="drinks">Напитки</option>
-                      <option value="desserts">Десерты</option>
-                  </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Цена (₽)</label>
-                    <input 
-                        type="number"
-                        className="w-full p-2 border rounded mt-1" 
-                        value={editingDish.price || ''} 
-                        onChange={e => setEditingDish({...editingDish, price: Number(e.target.value)})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Ссылка на фото</label>
-                    <input 
-                        className="w-full p-2 border rounded mt-1" 
-                        value={editingDish.image || ''} 
-                        onChange={e => setEditingDish({...editingDish, image: e.target.value})}
-                    />
-                  </div>
-              </div>
-              <div>
-                  <label className="block text-sm font-medium text-gray-700">Описание</label>
-                  <textarea 
-                    className="w-full p-2 border rounded mt-1" 
-                    rows={3}
-                    value={editingDish.description || ''} 
-                    onChange={e => setEditingDish({...editingDish, description: e.target.value})}
-                  />
-              </div>
-              <button 
-                onClick={saveDish}
-                disabled={isSyncing}
-                className="w-full bg-amber-900 text-white py-3 rounded-lg font-bold hover:bg-amber-800 transition flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                  <Save size={18} /> {isSyncing ? 'Сохранение...' : 'Сохранить в базу'}
-              </button>
+              <input placeholder="Название" className="w-full p-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 ring-amber-500" value={editingDish.name || ''} onChange={e => setEditingDish({...editingDish, name: e.target.value})} />
+              <select className="w-full p-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 ring-amber-500" value={editingDish.category} onChange={e => setEditingDish({...editingDish, category: e.target.value as any})}>
+                  <option value="main">Основные</option>
+                  <option value="soups">Супы</option>
+                  <option value="salads">Салаты</option>
+                  <option value="drinks">Напитки</option>
+                  <option value="desserts">Десерты</option>
+              </select>
+              <input type="number" placeholder="Цена" className="w-full p-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 ring-amber-500" value={editingDish.price || ''} onChange={e => setEditingDish({...editingDish, price: Number(e.target.value)})} />
+              <input placeholder="URL изображения" className="w-full p-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 ring-amber-500" value={editingDish.image || ''} onChange={e => setEditingDish({...editingDish, image: e.target.value})} />
+              <textarea placeholder="Описание" className="w-full p-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 ring-amber-500 h-24" value={editingDish.description || ''} onChange={e => setEditingDish({...editingDish, description: e.target.value})} />
+              <button onClick={saveDish} className="w-full bg-amber-900 text-white py-4 rounded-2xl font-bold shadow-lg">Сохранить</button>
           </div>
       </Modal>
-
-      {/* COURIER EDIT MODAL */}
-       <Modal 
-        isOpen={isCourierModalOpen} 
-        onClose={() => setIsCourierModalOpen(false)}
-        title={editingCourier.id ? "Редактировать курьера" : "Новый курьер"}
-      >
-          <div className="space-y-4">
-              <div>
-                  <label className="block text-sm font-medium text-gray-700">Имя</label>
-                  <input 
-                    className="w-full p-2 border rounded mt-1" 
-                    value={editingCourier.name || ''} 
-                    onChange={e => setEditingCourier({...editingCourier, name: e.target.value})}
-                  />
-              </div>
-              <div>
-                  <label className="block text-sm font-medium text-gray-700">Телефон</label>
-                  <input 
-                    className="w-full p-2 border rounded mt-1" 
-                    value={editingCourier.phone || ''} 
-                    onChange={e => setEditingCourier({...editingCourier, phone: e.target.value})}
-                  />
-              </div>
-              <div>
-                  <label className="block text-sm font-medium text-gray-700">Транспорт</label>
-                  <input 
-                    className="w-full p-2 border rounded mt-1" 
-                    value={editingCourier.vehicle || ''} 
-                    onChange={e => setEditingCourier({...editingCourier, vehicle: e.target.value})}
-                  />
-              </div>
-              <div>
-                  <label className="block text-sm font-medium text-gray-700">Статус</label>
-                   <select 
-                    className="w-full p-2 border rounded mt-1"
-                    value={editingCourier.status || 'available'}
-                    onChange={e => setEditingCourier({...editingCourier, status: e.target.value as any})}
-                  >
-                      <option value="available">Свободен</option>
-                      <option value="busy">Занят</option>
-                      <option value="offline">Не работает</option>
-                  </select>
-              </div>
-               <button 
-                onClick={saveCourier}
-                className="w-full bg-amber-900 text-white py-3 rounded-lg font-bold hover:bg-amber-800 transition flex items-center justify-center gap-2"
-              >
-                  <Save size={18} /> Сохранить
-              </button>
-          </div>
-      </Modal>
-
     </div>
   );
 };

@@ -1,4 +1,5 @@
-import { supabase } from './supabaseClient';
+
+import { supabase } from '../supabaseClient';
 
 /**
  * Initiates a payment via YooKassa.

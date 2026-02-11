@@ -5,7 +5,7 @@ import { Trash2, CreditCard, Wallet, ArrowRight, Minus, Plus } from 'lucide-reac
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { createPayment } from '../services/paymentService';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../services/supabaseClient';
 
 const Checkout: React.FC = () => {
   const { items, updateQuantity, removeFromCart, totalAmount, clearCart } = useCart();

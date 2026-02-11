@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, Plus } from 'lucide-react';
-import { supabase, MOCK_DISHES } from '../services/supabaseClient';
+import { supabase, MOCK_DISHES } from '../supabaseClient';
 import { Dish } from '../types';
 import { useCart } from '../contexts/CartContext';
 import Modal from '../components/ui/Modal';
@@ -30,15 +30,19 @@ const Home: React.FC = () => {
 
   const fetchDishes = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('dishes')
-      .select('*')
-      .order('name', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('dishes')
+        .select('*')
+        .order('name', { ascending: true });
 
-    if (!error && data && data.length > 0) {
-      setDishes(data);
-    } else {
-      console.warn('DB empty or error, using mock data');
+      if (!error && data && data.length > 0) {
+        setDishes(data);
+      } else {
+        console.warn('DB empty or error, using mock data');
+        setDishes(MOCK_DISHES);
+      }
+    } catch (e) {
       setDishes(MOCK_DISHES);
     }
     setIsLoading(false);
