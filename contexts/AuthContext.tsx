@@ -26,7 +26,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          await fetchOrCreateProfile(session.user);
         } else {
           setIsLoading(false);
         }
@@ -40,7 +40,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        await fetchProfile(session.user.id);
+        await fetchOrCreateProfile(session.user);
       } else {
         setUser(null);
         setIsLoading(false);
@@ -50,33 +50,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (uid: string) => {
+  const fetchOrCreateProfile = async (supabaseUser: any) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', uid)
+        .eq('id', supabaseUser.id)
         .maybeSingle(); 
       
       if (!error && data) {
         setUser(data as UserProfile);
-      } else if (!data) {
-        // Если профиля нет, создаем его на лету
-        const { data: { user: sbUser } } = await supabase.auth.getUser();
-        if (sbUser) {
-           const newProfile = {
-             id: sbUser.id,
-             full_name: sbUser.user_metadata?.full_name || 'Гость',
-             phone: sbUser.user_metadata?.phone || '',
-             address: '',
-             role: 'user'
-           };
-           await supabase.from('profiles').upsert(newProfile);
-           setUser(newProfile as UserProfile);
+      } else {
+        // Если профиля нет (например, первый вход через Google)
+        const newProfile = {
+          id: supabaseUser.id,
+          full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Гость',
+          phone: supabaseUser.user_metadata?.phone || '',
+          address: '',
+          role: 'user'
+        };
+        const { data: created, error: createError } = await supabase
+          .from('profiles')
+          .upsert(newProfile)
+          .select()
+          .maybeSingle();
+        
+        if (!createError && created) {
+          setUser(created as UserProfile);
+        } else {
+          // Если возникла ошибка записи в БД, все равно устанавливаем локального пользователя
+          setUser(newProfile as UserProfile);
         }
       }
     } catch (err) {
-      console.error('Error in fetchProfile:', err);
+      console.error('Profile fetch/create error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -94,15 +101,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
-    const { data, error } = await supabase.auth.signUp({ 
-      email, 
-      password,
-      options: { data: { full_name: fullName, phone } }
-    });
-    if (data.user && !error) {
-      await supabase.from('profiles').upsert({ id: data.user.id, full_name: fullName, phone, address, role: 'user' });
+    try {
+      const { data, error: authError } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: { data: { full_name: fullName, phone } }
+      });
+
+      if (authError) return { error: authError };
+
+      if (data.user) {
+        const { error: dbError } = await supabase.from('profiles').upsert({ 
+          id: data.user.id, 
+          full_name: fullName, 
+          phone, 
+          address, 
+          role: 'user' 
+        });
+        if (dbError) console.error("Profile creation error:", dbError);
+      }
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
     }
-    return { error };
   };
 
   const verifyOTP = async (email: string, token: string) => {
