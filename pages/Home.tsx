@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Info, RefreshCw } from 'lucide-react';
-import { supabase, MOCK_DISHES } from '../supabaseClient.ts';
+import { Search, Plus, RefreshCw } from 'lucide-react';
+import { supabase } from '../supabaseClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
 import Modal from '../components/ui/Modal.tsx';
@@ -18,7 +18,6 @@ const CATEGORIES = [
 const Home: React.FC = () => {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDemo, setIsDemo] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
@@ -38,20 +37,11 @@ const Home: React.FC = () => {
         .order('name', { ascending: true });
 
       if (error) throw error;
-
-      if (!data || data.length === 0) {
-        setDishes(MOCK_DISHES);
-        setIsDemo(true);
-      } else {
-        setDishes(data);
-        setIsDemo(false);
-      }
+      setDishes(data || []);
     } catch (e: any) {
-      console.warn("Supabase fetch failed, using mock data:", e.message);
-      setDishes(MOCK_DISHES);
-      setIsDemo(true);
+      console.error("Ошибка загрузки меню из БД:", e.message);
+      setDishes([]);
     } finally {
-      // Гарантируем, что загрузка прекратится через 500мс для плавности
       setTimeout(() => setIsLoading(false), 500);
     }
   };
@@ -76,13 +66,6 @@ const Home: React.FC = () => {
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-700">
-      {isDemo && !isLoading && (
-        <div className="bg-amber-100/60 border border-amber-200 p-3 rounded-2xl flex items-center justify-center gap-3 text-amber-900 text-[10px] font-black uppercase tracking-widest animate-bounce mt-4">
-          <Info size={14} />
-          Демо-режим: Данные загружены из памяти (БД не настроена)
-        </div>
-      )}
-
       <div className="text-center py-6">
         <h1 className="text-4xl md:text-6xl font-black text-amber-950 mb-3 font-serif italic tracking-tighter">Чайхана Жулебино</h1>
         <div className="w-24 h-1.5 bg-orange-500 mx-auto rounded-full mb-4 shadow-sm"></div>
