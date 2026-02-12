@@ -49,7 +49,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
           <div className="flex items-center gap-3">
             {isAdmin && (
-              <Link to="/admin" className="hidden md:flex items-center gap-1 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-sm font-medium transition">
+              <Link to="/admin" className="hidden md:flex items-center gap-1 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-sm font-medium transition text-white">
                 <Settings size={16} />
                 <span>Админ</span>
               </Link>
@@ -73,50 +73,37 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Sidebar Overlay */}
       {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-50 transition-opacity"
-          onClick={toggleSidebar}
-        />
+        <div className="fixed inset-0 bg-black/50 z-50 transition-opacity" onClick={toggleSidebar} />
       )}
 
       {/* Sidebar */}
       <div className={`fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-amber-900 to-amber-800 text-white z-50 transform transition-transform duration-300 shadow-2xl ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex justify-between items-center p-5 border-b border-white/20">
           <h2 className="text-xl font-bold">Меню</h2>
-          <button onClick={toggleSidebar} className="hover:text-orange-300 transition">
-            <X size={28} />
-          </button>
+          <button onClick={toggleSidebar} className="hover:text-orange-300 transition"><X size={28} /></button>
         </div>
         <nav className="p-4">
           <ul className="space-y-2">
             {navItems.map((item) => (
               <li key={item.path}>
-                <Link 
-                  to={item.path} 
-                  onClick={toggleSidebar}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${location.pathname === item.path ? 'bg-white/20 font-semibold' : 'hover:bg-white/10'}`}
-                >
-                  {item.icon}
-                  {item.label}
+                <Link to={item.path} onClick={toggleSidebar} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${location.pathname === item.path ? 'bg-white/20 font-semibold' : 'hover:bg-white/10'}`}>
+                  {item.icon} {item.label}
                 </Link>
               </li>
             ))}
+            
+            {/* Ссылка для администратора в боковом меню */}
             {isAdmin && (
-               <li>
-                <Link 
-                  to="/admin" 
-                  onClick={toggleSidebar}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${location.pathname === '/admin' ? 'bg-white/20 font-semibold' : 'hover:bg-white/10'}`}
-                >
-                  <Settings size={20} />
-                  Админ-панель
+              <li className="pt-4 mt-4 border-t border-white/10">
+                <Link to="/admin" onClick={toggleSidebar} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition text-orange-400 font-black uppercase text-[10px] tracking-widest ${location.pathname === '/admin' ? 'bg-white/20' : 'hover:bg-white/10'}`}>
+                  <Settings size={20} /> Панель управления
                 </Link>
               </li>
             )}
           </ul>
         </nav>
-        <div className="absolute bottom-0 w-full p-6 text-center text-sm text-white/60">
-          <p>© 2024 Чайхана Жулебино</p>
+        <div className="absolute bottom-6 w-full text-center px-4">
+           <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] font-bold">Чайхана Жулебино</p>
         </div>
       </div>
 
@@ -126,18 +113,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </main>
 
       {/* Footer */}
-      <footer className="bg-amber-950 text-white py-8 mt-auto">
+      <footer className="bg-amber-950 text-white py-12 mt-auto">
         <div className="container mx-auto px-4 text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
+          <div className="flex items-center justify-center gap-2 mb-6">
             <UtensilsCrossed size={24} className="text-orange-400" />
             <h2 className="text-xl font-bold">Чайхана Жулебино</h2>
           </div>
-          <div className="flex justify-center gap-6 mb-6 text-sm text-gray-300">
+          <div className="flex justify-center gap-6 mb-8 text-sm text-gray-400">
             <Link to="/about" className="hover:text-white transition">О нас</Link>
             <Link to="/delivery" className="hover:text-white transition">Доставка</Link>
+            <Link to="/privacy" className="hover:text-white transition">Приватность</Link>
             <Link to="/contacts" className="hover:text-white transition">Контакты</Link>
           </div>
-          <p className="text-xs text-gray-500">Работаем с душой. Готовим с любовью.</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest">© 2024 Чайхана Жулебино. Все права защищены.</p>
         </div>
       </footer>
     </div>

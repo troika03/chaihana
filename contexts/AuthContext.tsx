@@ -8,6 +8,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAdmin: boolean;
   signIn: (identifier: string, password: string) => Promise<{ error: any }>;
+  signInWithGoogle: () => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName: string, phone: string, address: string) => Promise<{ error: any }>;
   verifyOTP: (email: string, token: string) => Promise<{ error: any }>;
   resendOTP: (email: string) => Promise<{ error: any }>;
@@ -21,23 +22,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const safetyTimeout = setTimeout(() => {
-      if (isLoading) {
-        console.warn("Auth initialization timed out.");
-        setIsLoading(false);
-      }
-    }, 7000);
-
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          await fetchOrCreateProfile(session.user);
         } else {
           setIsLoading(false);
         }
       } catch (e) {
-        console.error("Auth init error:", e);
         setIsLoading(false);
       }
     };
@@ -46,96 +39,96 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        await fetchProfile(session.user.id);
+        await fetchOrCreateProfile(session.user);
       } else {
         setUser(null);
         setIsLoading(false);
       }
     });
 
-    return () => {
-      clearTimeout(safetyTimeout);
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (uid: string) => {
+  const fetchOrCreateProfile = async (supabaseUser: any) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', uid)
+        .eq('id', supabaseUser.id)
         .maybeSingle(); 
       
-      if (!error && data) {
+      if (error) throw error;
+
+      if (data) {
         setUser(data as UserProfile);
       } else {
-        setUser(null);
+        // Если профиля нет (первый вход через Google), создаем его
+        const newProfile = {
+          id: supabaseUser.id,
+          full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Гость',
+          phone: supabaseUser.user_metadata?.phone || '',
+          address: '',
+          role: 'user'
+        };
+        const { data: created, error: createError } = await supabase
+          .from('profiles')
+          .upsert(newProfile)
+          .select()
+          .single();
+        
+        if (!createError) setUser(created as UserProfile);
       }
     } catch (err) {
-      console.error('Error in fetchProfile:', err);
+      console.error('Profile error:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
   const signIn = async (identifier: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ 
-      email: identifier, 
-      password 
+    return await supabase.auth.signInWithPassword({ email: identifier, password });
+  };
+
+  const signInWithGoogle = async () => {
+    return await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
     });
-    return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
     try {
-      const formattedPhone = phone?.trim() === '' ? null : phone?.trim();
       const { data, error: authError } = await supabase.auth.signUp({ 
         email, 
         password,
-        options: { 
-          data: { 
-            full_name: fullName,
-            phone: formattedPhone
-          } 
-        }
+        options: { data: { full_name: fullName, phone } }
       });
 
       if (authError) return { error: authError };
 
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({ 
-            id: data.user.id, 
-            full_name: fullName, 
-            phone: formattedPhone, 
-            address: address, 
-            role: 'user' 
-          });
-        if (profileError) console.error('Profile error:', profileError.message);
+        await supabase.from('profiles').upsert({ 
+          id: data.user.id, 
+          full_name: fullName, 
+          phone, 
+          address, 
+          role: 'user' 
+        });
       }
       return { error: null };
     } catch (err: any) {
-      return { error: { message: err.message || "Ошибка системы" } };
+      return { error: err };
     }
   };
 
   const verifyOTP = async (email: string, token: string) => {
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'signup'
-    });
-    return { error };
+    return await supabase.auth.verifyOtp({ email, token, type: 'signup' });
   };
 
   const resendOTP = async (email: string) => {
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: email
-    });
-    return { error };
+    return await supabase.auth.resend({ type: 'signup', email });
   };
 
   const signOut = async () => {
@@ -143,10 +136,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(null);
   };
 
-  const isAdmin = user?.role === 'admin';
-
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAdmin, signIn, signUp, verifyOTP, resendOTP, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      isLoading, 
+      isAdmin: user?.role === 'admin', 
+      signIn, 
+      signInWithGoogle,
+      signUp, 
+      verifyOTP, 
+      resendOTP, 
+      signOut 
+    }}>
       {children}
     </AuthContext.Provider>
   );

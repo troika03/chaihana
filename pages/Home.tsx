@@ -27,6 +27,16 @@ const Home: React.FC = () => {
 
   useEffect(() => {
     fetchDishes();
+    
+    // Fail-safe лоадера для Home
+    const timer = setTimeout(() => {
+      if (isLoading && dishes.length === 0) {
+        setIsLoading(false);
+        setError("Превышено время ожидания. Проверьте подключение к БД.");
+      }
+    }, 8000);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const fetchDishes = async () => {
@@ -41,9 +51,10 @@ const Home: React.FC = () => {
       if (dbError) throw dbError;
       setDishes(data || []);
     } catch (e: any) {
-      console.error("Ошибка загрузки меню из БД:", e.message);
-      setError("Не удалось загрузить меню. Убедитесь, что таблицы созданы в Supabase.");
-      setDishes([]);
+      console.error("Ошибка загрузки меню:", e.message);
+      setError(e.message.includes('relation "dishes" does not exist') 
+        ? "Таблица 'dishes' не найдена в базе данных. Создайте её через SQL Editor."
+        : "Не удалось загрузить меню. Проверьте консоль или настройки Supabase.");
     } finally {
       setIsLoading(false);
     }
@@ -108,9 +119,6 @@ const Home: React.FC = () => {
         <div className="flex flex-col items-center justify-center py-40 space-y-6">
           <div className="relative">
              <div className="w-16 h-16 border-4 border-amber-100 border-t-amber-900 rounded-full animate-spin"></div>
-             <div className="absolute inset-0 flex items-center justify-center">
-                <RefreshCw size={16} className="text-amber-900/20" />
-             </div>
           </div>
           <p className="text-amber-900 font-black uppercase text-[10px] tracking-[0.2em] animate-pulse">Загрузка меню...</p>
         </div>
@@ -123,8 +131,13 @@ const Home: React.FC = () => {
             onClick={fetchDishes}
             className="bg-amber-900 text-white px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-800 transition flex items-center gap-2 mx-auto"
           >
-            <RefreshCw size={14} /> Попробовать снова
+            <RefreshCw size={14} /> Повторить попытку
           </button>
+        </div>
+      ) : filteredDishes.length === 0 ? (
+        <div className="text-center py-40">
+          <p className="text-2xl font-black text-amber-950/20 uppercase">База меню пуста</p>
+          <p className="text-xs text-gray-400 mt-2">Добавьте блюда в админ-панели или проверьте Supabase</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -140,24 +153,16 @@ const Home: React.FC = () => {
                   alt={dish.name} 
                   className="w-full h-full object-cover transition duration-1000 group-hover:scale-110"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-amber-950/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                
                 <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-2xl font-black text-amber-900 shadow-xl">
                   {dish.price} ₽
                 </div>
-
-                {!dish.available && (
-                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                      <span className="bg-white text-amber-950 px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl">Скоро в меню</span>
-                   </div>
-                )}
               </div>
               <div className="p-8">
                 <h3 className="font-black text-xl text-amber-950 mb-2 leading-tight group-hover:text-orange-600 transition-colors">{dish.name}</h3>
                 <p className="text-xs text-gray-400 font-medium line-clamp-2 mb-4 h-8">{dish.description}</p>
-                <div className="flex items-center justify-between mt-auto">
+                <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black uppercase tracking-widest text-amber-900/30 bg-amber-50 px-3 py-1 rounded-lg">{dish.category}</span>
-                  <div className="w-10 h-10 bg-amber-900 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-900/20 group-hover:bg-orange-500 transition-colors">
+                  <div className="w-10 h-10 bg-amber-900 text-white rounded-2xl flex items-center justify-center group-hover:bg-orange-500 transition-colors">
                     <Plus size={20} />
                   </div>
                 </div>
@@ -167,56 +172,20 @@ const Home: React.FC = () => {
         </div>
       )}
 
-      {!isLoading && !error && filteredDishes.length === 0 && (
-        <div className="text-center py-40 space-y-6">
-          <div className="bg-amber-50 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-4 rotate-12">
-             <Search size={40} className="text-amber-200" />
-          </div>
-          <p className="text-2xl font-black text-amber-950/20 uppercase tracking-tighter">Блюда не найдены</p>
-          <button onClick={() => {setSearchQuery(''); setActiveCategory('all');}} className="bg-amber-900 text-white px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-800 transition">Показать всё меню</button>
-        </div>
-      )}
-
-      <Modal 
-        isOpen={!!selectedDish} 
-        onClose={() => setSelectedDish(null)}
-        title={selectedDish?.name}
-      >
+      <Modal isOpen={!!selectedDish} onClose={() => setSelectedDish(null)} title={selectedDish?.name}>
         {selectedDish && (
           <div className="space-y-8">
-            <div className="relative h-80 rounded-[2.5rem] overflow-hidden shadow-2xl">
-              <img 
-                src={selectedDish.image} 
-                alt={selectedDish.name} 
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute bottom-6 right-6 bg-white px-6 py-3 rounded-[1.5rem] font-black text-2xl text-amber-950 shadow-2xl">
-                {selectedDish.price * quantity} ₽
-              </div>
+            <div className="relative h-80 rounded-[2.5rem] overflow-hidden">
+              <img src={selectedDish.image} alt={selectedDish.name} className="w-full h-full object-cover" />
             </div>
-            
             <div className="px-2">
-              <p className="text-gray-500 text-lg leading-relaxed mb-8 font-medium">{selectedDish.description}</p>
-              
-              <div className="flex items-center justify-between bg-amber-50 p-6 rounded-[2rem] mb-8 border border-amber-100">
-                <span className="text-xs font-black uppercase tracking-widest text-amber-900/40">Количество</span>
-                {selectedDish.available ? (
-                    <div className="flex items-center gap-6 bg-white px-6 py-3 rounded-2xl shadow-sm border border-amber-100">
-                      <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-8 h-8 flex items-center justify-center text-amber-900 hover:bg-amber-50 rounded-lg font-black text-xl transition">-</button>
-                      <span className="font-black text-2xl w-8 text-center">{quantity}</span>
-                      <button onClick={() => setQuantity(quantity + 1)} className="w-8 h-8 flex items-center justify-center text-amber-900 hover:bg-amber-50 rounded-lg font-black text-xl transition">+</button>
-                    </div>
-                ) : (
-                    <span className="text-red-600 font-black uppercase text-[10px] tracking-widest">Временно нет в наличии</span>
-                )}
-              </div>
-
+              <p className="text-gray-500 text-lg leading-relaxed mb-8">{selectedDish.description}</p>
               <button 
                 onClick={handleAddToCart}
                 disabled={!selectedDish.available}
-                className="w-full bg-amber-950 text-white py-6 rounded-[2.5rem] font-black text-xl hover:bg-amber-800 transition shadow-2xl shadow-amber-950/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 uppercase tracking-widest"
+                className="w-full bg-amber-950 text-white py-6 rounded-[2.5rem] font-black text-xl hover:bg-amber-800 transition"
               >
-                {selectedDish.available ? `Добавить в корзину` : 'Нет в наличии'}
+                {selectedDish.available ? `Добавить за ${selectedDish.price * quantity} ₽` : 'Нет в наличии'}
               </button>
             </div>
           </div>

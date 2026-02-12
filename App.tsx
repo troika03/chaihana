@@ -6,6 +6,7 @@ import Home from './pages/Home.tsx';
 import Checkout from './pages/Checkout.tsx';
 import Admin from './pages/Admin.tsx';
 import Profile from './pages/Profile.tsx';
+import PrivacyPolicy from './pages/PrivacyPolicy.tsx';
 import { CartProvider } from './contexts/CartContext.tsx';
 import { AuthProvider } from './contexts/AuthContext.tsx';
 
@@ -27,6 +28,7 @@ const App: React.FC = () => {
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/delivery" element={<PlaceholderPage title="Доставка" />} />
               <Route path="/about" element={<PlaceholderPage title="О нас" />} />
               <Route path="/contacts" element={<PlaceholderPage title="Контакты" />} />
