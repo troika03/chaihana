@@ -22,20 +22,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Таймаут 30 секунд для инициализации (время пробуждения бесплатной базы)
-    const safetyTimer = setTimeout(() => {
-      if (isLoading) {
-        console.warn("Auth initialization timed out (database wake up).");
-        setIsLoading(false);
-      }
-    }, 30000);
-
     const initAuth = async () => {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
-          console.warn("Auth check failed:", sessionError.message);
+          console.warn("Auth check error:", sessionError.message);
           setIsLoading(false);
           return;
         }
@@ -63,7 +55,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => {
-      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, []);
