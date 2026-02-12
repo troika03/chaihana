@@ -1,17 +1,21 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Order, Dish } from './types';
 import { 
   Plus, Edit2, Trash2, RefreshCw, 
   Package, Utensils, TrendingUp, 
   CheckCircle2, Clock, Truck, 
-  XCircle, Filter, Search, Save, Calendar, Archive, Eye, ToggleLeft, ToggleRight
+  XCircle, Filter, Search, Save, Calendar, Archive, Eye, ToggleLeft, ToggleRight,
+  Volume2, VolumeX, BellRing
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from '../components/ui/Modal';
 
 type TimeRange = 'day' | 'week' | 'month' | 'all' | 'custom';
+
+// URL звука уведомления
+const NOTIFICATION_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
 const Admin: React.FC = () => {
   const { isAdmin } = useAuth();
@@ -23,12 +27,47 @@ const Admin: React.FC = () => {
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
+  // Управление звуком
+  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
+  const [lastNotificationTime, setLastNotificationTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const [isDishModalOpen, setIsDishModalOpen] = useState(false);
   const [editingDish, setEditingDish] = useState<Partial<Dish> | null>(null);
 
   useEffect(() => {
-    if (isAdmin) loadData();
-  }, [isAdmin, activeTab]);
+    if (isAdmin) {
+      loadData();
+      
+      // Инициализация аудио
+      audioRef.current = new Audio(NOTIFICATION_SOUND_URL);
+      
+      // Подписка на новые заказы в реальном времени
+      const channel = supabase
+        .channel('admin-orders-realtime')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'orders' },
+          (payload) => {
+            const newOrder = payload.new as Order;
+            setOrders(prev => [newOrder, ...prev]);
+            
+            // Воспроизведение звука
+            if (isSoundEnabled) {
+              audioRef.current?.play().catch(e => console.warn('Audio play blocked:', e));
+            }
+            
+            // Визуальный эффект для индикации
+            setLastNotificationTime(Date.now());
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [isAdmin, isSoundEnabled]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -55,7 +94,7 @@ const Admin: React.FC = () => {
 
   const stats = useMemo(() => {
     const now = new Date();
-    let filtered = orders.filter(o => o.status === 'delivered'); // Считаем только завершенные заказы для статистики выручки
+    let filtered = orders.filter(o => o.status === 'delivered');
 
     if (timeRange !== 'all') {
       filtered = filtered.filter(o => {
@@ -150,24 +189,31 @@ const Admin: React.FC = () => {
           <h1 className="text-3xl font-black text-amber-950 uppercase italic tracking-tighter">Чайхана Жулебино: Админ</h1>
           <p className="text-amber-800/60 font-bold text-xs uppercase tracking-widest">Панель управления заведением</p>
         </div>
-        <button onClick={loadData} className="flex items-center gap-2 bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-amber-100 font-black text-[10px] uppercase tracking-widest text-amber-900 transition hover:bg-amber-50">
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> Синхронизация данных
-        </button>
-      </div>
-
-      <div className="flex gap-2 p-1.5 bg-amber-100/30 rounded-2xl w-fit border border-amber-100">
-        {['stats', 'orders', 'menu'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab as any)}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
-              activeTab === tab ? 'bg-amber-950 text-white shadow-xl scale-105' : 'text-amber-900/40 hover:bg-white hover:text-amber-900'
+        
+        <div className="flex items-center gap-3">
+          {/* Переключатель звука */}
+          <button 
+            onClick={() => {
+              setIsSoundEnabled(!isSoundEnabled);
+              // Проигрываем звук один раз при включении для обхода блокировки браузера
+              if (!isSoundEnabled) {
+                audioRef.current?.play().catch(() => {});
+              }
+            }}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl shadow-sm border font-black text-[10px] uppercase tracking-widest transition-all ${
+              isSoundEnabled 
+                ? 'bg-amber-950 text-white border-amber-950 animate-in' 
+                : 'bg-white text-amber-900 border-amber-100'
             }`}
           >
-            {tab === 'stats' ? <TrendingUp size={14} /> : tab === 'orders' ? <Package size={14} /> : <Utensils size={14} />}
-            {tab === 'stats' ? 'Статистика' : tab === 'orders' ? 'Заказы' : 'Меню'}
+            {isSoundEnabled ? <Volume2 size={14} className="animate-pulse" /> : <VolumeX size={14} />}
+            Звук: {isSoundEnabled ? 'ВКЛ' : 'ВЫКЛ'}
           </button>
-        ))}
+
+          <button onClick={loadData} className="flex items-center gap-2 bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-amber-100 font-black text-[10px] uppercase tracking-widest text-amber-900 transition hover:bg-amber-50">
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> Синхронизация
+          </button>
+        </div>
       </div>
 
       {activeTab === 'stats' && (
@@ -209,11 +255,33 @@ const Admin: React.FC = () => {
         </div>
       )}
 
+      {/* Tabs Selector */}
+      <div className="flex gap-2 p-1.5 bg-amber-100/30 rounded-2xl w-fit border border-amber-100">
+        {['stats', 'orders', 'menu'].map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab as any)}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+              activeTab === tab ? 'bg-amber-950 text-white shadow-xl scale-105' : 'text-amber-900/40 hover:bg-white hover:text-amber-900'
+            }`}
+          >
+            {tab === 'stats' ? <TrendingUp size={14} /> : tab === 'orders' ? <Package size={14} /> : <Utensils size={14} />}
+            {tab === 'stats' ? 'Статистика' : tab === 'orders' ? 'Заказы' : 'Меню'}
+          </button>
+        ))}
+      </div>
+
       {activeTab === 'orders' && (
         <div className="space-y-6">
           <div className="flex justify-between items-center px-4">
-            <h3 className="text-xl font-black text-amber-950 uppercase tracking-tighter italic">
+            <h3 className="text-xl font-black text-amber-950 uppercase tracking-tighter italic flex items-center gap-3">
               {showArchive ? 'Архив (Завершенные)' : 'Оперативные заказы'}
+              {!showArchive && orders.filter(o => o.status === 'pending').length > 0 && (
+                <span className="flex h-3 w-3 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
+                </span>
+              )}
             </h3>
             <button 
               onClick={() => setShowArchive(!showArchive)}
@@ -238,8 +306,13 @@ const Admin: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-amber-50">
                 {filteredOrders.map(order => (
-                  <tr key={order.id} className="hover:bg-amber-50/10 transition">
-                    <td className="p-6 font-black text-amber-950 text-sm">#{order.id}</td>
+                  <tr key={order.id} className={`hover:bg-amber-50/10 transition ${order.status === 'pending' ? 'bg-orange-50/20' : ''}`}>
+                    <td className="p-6 font-black text-amber-950 text-sm">
+                      <div className="flex items-center gap-2">
+                        #{order.id}
+                        {order.status === 'pending' && <BellRing size={12} className="text-orange-500 animate-bounce" />}
+                      </div>
+                    </td>
                     <td className="p-6">
                       <div className="text-sm font-black text-amber-900">{order.contact_phone}</div>
                       <div className="text-[10px] text-gray-400 font-bold uppercase truncate max-w-[200px]">{order.delivery_address}</div>
