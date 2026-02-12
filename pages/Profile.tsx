@@ -243,6 +243,38 @@ const Profile: React.FC = () => {
           <LogOut size={20} /> Выход
         </button>
       </div>
+      
+      {/* Orders history section */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="bg-amber-900 p-2 rounded-xl text-white">
+            <Package size={24} />
+          </div>
+          <h3 className="text-2xl font-black text-amber-950">История заказов</h3>
+        </div>
+        
+        {isLoadingOrders ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-amber-900" size={32} /></div>
+        ) : orders.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-amber-100">
+            <p className="text-gray-400 font-bold">У вас пока нет активных заказов</p>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {orders.map(order => (
+              <div key={order.id} className="bg-white p-6 rounded-3xl border border-amber-50 shadow-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h4 className="font-black text-amber-950">Заказ #{order.id}</h4>
+                    <p className="text-[10px] text-gray-400 uppercase">{new Date(order.created_at).toLocaleString()}</p>
+                  </div>
+                  <span className="font-black text-amber-900">{order.total_amount} ₽</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
