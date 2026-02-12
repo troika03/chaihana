@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, RefreshCw } from 'lucide-react';
+import { Search, Plus, RefreshCw, AlertTriangle } from 'lucide-react';
 import { supabase } from '../supabaseClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
@@ -18,6 +18,7 @@ const CATEGORIES = [
 const Home: React.FC = () => {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
@@ -30,19 +31,21 @@ const Home: React.FC = () => {
 
   const fetchDishes = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      const { data, error } = await supabase
+      const { data, error: dbError } = await supabase
         .from('dishes')
         .select('*')
         .order('name', { ascending: true });
 
-      if (error) throw error;
+      if (dbError) throw dbError;
       setDishes(data || []);
     } catch (e: any) {
       console.error("Ошибка загрузки меню из БД:", e.message);
+      setError("Не удалось загрузить меню. Убедитесь, что таблицы созданы в Supabase.");
       setDishes([]);
     } finally {
-      setTimeout(() => setIsLoading(false), 500);
+      setIsLoading(false);
     }
   };
 
@@ -109,7 +112,19 @@ const Home: React.FC = () => {
                 <RefreshCw size={16} className="text-amber-900/20" />
              </div>
           </div>
-          <p className="text-amber-900 font-black uppercase text-[10px] tracking-[0.2em] animate-pulse">Разжигаем тандыр...</p>
+          <p className="text-amber-900 font-black uppercase text-[10px] tracking-[0.2em] animate-pulse">Загрузка меню...</p>
+        </div>
+      ) : error ? (
+        <div className="text-center py-20 bg-white rounded-[3rem] shadow-sm border border-red-100 max-w-lg mx-auto p-8">
+          <AlertTriangle size={48} className="text-red-400 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Ошибка подключения</h2>
+          <p className="text-gray-500 mb-6 text-sm">{error}</p>
+          <button 
+            onClick={fetchDishes}
+            className="bg-amber-900 text-white px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-800 transition flex items-center gap-2 mx-auto"
+          >
+            <RefreshCw size={14} /> Попробовать снова
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -152,7 +167,7 @@ const Home: React.FC = () => {
         </div>
       )}
 
-      {!isLoading && filteredDishes.length === 0 && (
+      {!isLoading && !error && filteredDishes.length === 0 && (
         <div className="text-center py-40 space-y-6">
           <div className="bg-amber-50 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-4 rotate-12">
              <Search size={40} className="text-amber-200" />

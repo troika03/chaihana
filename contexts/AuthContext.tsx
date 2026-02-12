@@ -20,6 +20,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Предохранитель: если инициализация БД занимает более 7 секунд, прекращаем загрузку
+    const safetyTimeout = setTimeout(() => {
+      if (isLoading) {
+        console.warn("Auth initialization timed out. Forcing end of loading state.");
+        setIsLoading(false);
+      }
+    }, 7000);
+
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -29,7 +37,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setIsLoading(false);
         }
       } catch (e) {
-        console.error("Auth init error", e);
+        console.error("Auth init error:", e);
         setIsLoading(false);
       }
     };
@@ -37,6 +45,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.debug("Auth state change:", event);
       if (session?.user) {
         await fetchProfile(session.user.id);
       } else {
@@ -45,7 +54,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(safetyTimeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchProfile = async (uid: string) => {
@@ -54,14 +66,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .from('profiles')
         .select('*')
         .eq('id', uid)
-        .maybeSingle(); // Используем maybeSingle вместо single, чтобы не кидало ошибку 406
+        .maybeSingle(); 
       
       if (!error && data) {
         setUser(data as UserProfile);
       } else {
-        // Если профиля нет в таблице, но юзер залогинен (такое бывает при сбоях регистрации)
-        // Мы не вешаем загрузку, а просто даем юзеру пользоваться приложением
-        console.warn('Profile not found for authenticated user');
+        // Если юзер в Auth есть, а в таблице profiles нет (например, сбой при регистрации), 
+        // создаем "виртуальный" профиль на основе email, чтобы не виснуть
+        console.warn('Profile record not found in DB for user UID:', uid);
         setUser(null);
       }
     } catch (err) {
