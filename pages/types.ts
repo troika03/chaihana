@@ -40,7 +40,7 @@ export interface Order {
   delivery_address: string;
   contact_phone: string;
   comment?: string;
-  payment_method: 'card' | 'cash';
+  payment_method: 'card'; // Изменено: только карта
   payment_status: 'pending' | 'succeeded' | 'failed';
   assigned_courier_id?: number;
   is_rated?: boolean;

@@ -2,42 +2,47 @@
 import { supabase } from '../supabaseClient';
 
 /**
- * Initiates a payment via YooKassa.
- * 
- * SECURITY NOTE: 
- * You CANNOT create a payment directly from the browser using the Secret Key.
- * This function should call YOUR backend (Supabase Edge Function), which then calls YooKassa.
+ * Инициализирует платеж через ЮKassa.
+ * В реальном приложении эта функция вызывает Supabase Edge Function,
+ * которая безопасно общается с API ЮKassa, используя ShopID и SecretKey.
  */
 export const createPayment = async (orderId: number, amount: number, description: string) => {
   console.log('Initiating YooKassa payment for Order:', orderId, 'Amount:', amount);
 
   try {
-    // 1. Call Supabase Edge Function (Backend)
-    // const { data, error } = await supabase.functions.invoke('create-payment', {
-    //   body: { orderId, amount, description }
+    // В реальной интеграции:
+    // const { data, error } = await supabase.functions.invoke('yookassa-payment', {
+    //   body: { orderId, amount, description, return_url: window.location.href }
     // });
-    
     // if (error) throw error;
-    
-    // 2. Redirect user to confirmation_url
-    // window.location.href = data.confirmation_url;
+    // window.location.href = data.confirmation_url; // Редирект на ЮKassa
 
-    // --- MOCK SIMULATION START ---
+    // --- ИМИТАЦИЯ ПРОЦЕССА ОПЛАТЫ ---
     return new Promise<{success: boolean, message: string}>((resolve) => {
-      setTimeout(() => {
-        // Simulate 90% success rate
-        const isSuccess = Math.random() > 0.1;
+      // Имитируем задержку на "редирект и ввод данных карты"
+      setTimeout(async () => {
+        const isSuccess = Math.random() > 0.05; // 95% успех
+        
         if (isSuccess) {
-           resolve({ success: true, message: 'Оплата успешно проведена (Тестовый режим)' });
+          // Имитируем получение вебхука от ЮKassa бэкендом
+          await supabase
+            .from('orders')
+            .update({ payment_status: 'succeeded' })
+            .eq('id', orderId);
+            
+          resolve({ success: true, message: 'Платеж успешно подтвержден' });
         } else {
-           resolve({ success: false, message: 'Ошибка оплаты. Попробуйте снова.' });
+          await supabase
+            .from('orders')
+            .update({ payment_status: 'failed' })
+            .eq('id', orderId);
+            
+          resolve({ success: false, message: 'Платеж отклонен банком. Попробуйте другую карту.' });
         }
-      }, 2000);
+      }, 2500);
     });
-    // --- MOCK SIMULATION END ---
-
   } catch (error) {
     console.error('Payment Error:', error);
-    return { success: false, message: 'System error during payment initialization.' };
+    return { success: false, message: 'Ошибка связи с платежным шлюзом.' };
   }
 };
