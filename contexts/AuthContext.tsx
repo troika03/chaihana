@@ -54,12 +54,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .from('profiles')
         .select('*')
         .eq('id', uid)
-        .single();
+        .maybeSingle(); // Используем maybeSingle вместо single, чтобы не кидало ошибку 406
       
       if (!error && data) {
         setUser(data as UserProfile);
-      } else if (error) {
-        console.error('Profile fetch error:', error.message);
+      } else {
+        // Если профиля нет в таблице, но юзер залогинен (такое бывает при сбоях регистрации)
+        // Мы не вешаем загрузку, а просто даем юзеру пользоваться приложением
+        console.warn('Profile not found for authenticated user');
+        setUser(null);
       }
     } catch (err) {
       console.error('Error in fetchProfile:', err);
@@ -94,7 +97,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (authError) return { error: authError };
 
       if (data.user) {
-        await supabase
+        // Создаем запись профиля
+        const { error: profileError } = await supabase
           .from('profiles')
           .upsert({ 
             id: data.user.id, 
@@ -103,6 +107,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             address: address, 
             role: 'user' 
           });
+        
+        if (profileError) console.error('Error creating profile during signup:', profileError.message);
       }
       
       return { error: null };
