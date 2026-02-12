@@ -10,6 +10,7 @@ interface AuthContextType {
   signIn: (identifier: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName: string, phone: string, address: string) => Promise<{ error: any }>;
   verifyOTP: (email: string, token: string) => Promise<{ error: any }>;
+  resendOTP: (email: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -20,10 +21,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Предохранитель: если инициализация БД занимает более 7 секунд, прекращаем загрузку
     const safetyTimeout = setTimeout(() => {
       if (isLoading) {
-        console.warn("Auth initialization timed out. Forcing end of loading state.");
+        console.warn("Auth initialization timed out.");
         setIsLoading(false);
       }
     }, 7000);
@@ -45,7 +45,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.debug("Auth state change:", event);
       if (session?.user) {
         await fetchProfile(session.user.id);
       } else {
@@ -71,9 +70,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!error && data) {
         setUser(data as UserProfile);
       } else {
-        // Если юзер в Auth есть, а в таблице profiles нет (например, сбой при регистрации), 
-        // создаем "виртуальный" профиль на основе email, чтобы не виснуть
-        console.warn('Profile record not found in DB for user UID:', uid);
         setUser(null);
       }
     } catch (err) {
@@ -94,7 +90,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
     try {
       const formattedPhone = phone?.trim() === '' ? null : phone?.trim();
-
       const { data, error: authError } = await supabase.auth.signUp({ 
         email, 
         password,
@@ -109,7 +104,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (authError) return { error: authError };
 
       if (data.user) {
-        // Создаем запись профиля
         const { error: profileError } = await supabase
           .from('profiles')
           .upsert({ 
@@ -119,10 +113,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             address: address, 
             role: 'user' 
           });
-        
-        if (profileError) console.error('Error creating profile during signup:', profileError.message);
+        if (profileError) console.error('Profile error:', profileError.message);
       }
-      
       return { error: null };
     } catch (err: any) {
       return { error: { message: err.message || "Ошибка системы" } };
@@ -138,6 +130,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { error };
   };
 
+  const resendOTP = async (email: string) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email
+    });
+    return { error };
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -146,7 +146,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isAdmin = user?.role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAdmin, signIn, signUp, verifyOTP, signOut }}>
+    <AuthContext.Provider value={{ user, isLoading, isAdmin, signIn, signUp, verifyOTP, resendOTP, signOut }}>
       {children}
     </AuthContext.Provider>
   );

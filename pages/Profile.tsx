@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { supabase } from '../supabaseClient.ts';
-import { LogOut, User as UserIcon, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle, ShieldCheck, ArrowLeft, Clock, MapPin, CheckCircle } from 'lucide-react';
+import { LogOut, User as UserIcon, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle, ShieldCheck, ArrowLeft, Clock, MapPin, CheckCircle, RefreshCcw } from 'lucide-react';
 
 const Profile: React.FC = () => {
-  const { user, signIn, signUp, verifyOTP, signOut, isLoading } = useAuth();
+  const { user, signIn, signUp, verifyOTP, resendOTP, signOut, isLoading } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [isAuthProcessing, setIsAuthProcessing] = useState(false);
@@ -13,6 +13,9 @@ const Profile: React.FC = () => {
   const [isOtpMode, setIsOtpMode] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [agreedToPolicy, setAgreedToPolicy] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+  
+  const otpInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({ 
     identifier: '', 
@@ -29,6 +32,16 @@ const Profile: React.FC = () => {
       fetchOrders();
     }
   }, [user]);
+
+  useEffect(() => {
+    let interval: any;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
 
   const fetchOrders = async () => {
     setIsLoadingOrders(true);
@@ -49,13 +62,31 @@ const Profile: React.FC = () => {
     }
   };
 
+  const handleResendCode = async () => {
+    if (resendTimer > 0) return;
+    const emailToResend = isLoginMode ? formData.identifier : formData.email;
+    setIsAuthProcessing(true);
+    const { error } = await resendOTP(emailToResend);
+    setIsAuthProcessing(false);
+    if (error) {
+      setAuthError('Ошибка отправки: ' + error.message);
+    } else {
+      setResendTimer(60);
+      setAuthError('Новый 6-значный код отправлен на вашу почту');
+    }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isAuthProcessing) return;
 
-    // Валидация политики при регистрации
     if (!isLoginMode && !isOtpMode && !agreedToPolicy) {
       setAuthError('Необходимо согласиться с политикой конфиденциальности');
+      return;
+    }
+
+    if (isOtpMode && formData.otpCode.length !== 6) {
+      setAuthError('Введите все 6 цифр кода');
       return;
     }
 
@@ -66,16 +97,18 @@ const Profile: React.FC = () => {
         const emailToVerify = isLoginMode ? formData.identifier : formData.email;
         const { error } = await verifyOTP(emailToVerify, formData.otpCode);
         if (error) {
-          setAuthError('Неверный код подтверждения. Попробуйте еще раз.');
+          setAuthError('Неверный код. Пожалуйста, проверьте почту (код состоит из 6 цифр).');
         } else {
           setIsOtpMode(false);
+          setAuthError(null);
         }
       } else if (isLoginMode) {
         const { error } = await signIn(formData.identifier, formData.password);
         if (error) {
           if (error.message.includes('Email not confirmed')) {
-            setAuthError('Email не подтвержден. Введите 6-значный код из письма.');
+            setAuthError('Email не подтвержден. Мы отправили 6-значный код.');
             setIsOtpMode(true);
+            setResendTimer(60);
           } else {
             setAuthError('Неверный email или пароль');
           }
@@ -86,7 +119,8 @@ const Profile: React.FC = () => {
           setAuthError(error.message);
         } else {
           setIsOtpMode(true);
-          setAuthError('Мы отправили код подтверждения на ваш Email.');
+          setResendTimer(60);
+          setAuthError('6-значный код отправлен на ' + formData.email);
         }
       }
     } catch (err: any) {
@@ -94,6 +128,11 @@ const Profile: React.FC = () => {
     } finally {
       setIsAuthProcessing(false);
     }
+  };
+
+  const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setFormData({ ...formData, otpCode: value });
   };
 
   if (isLoading) {
@@ -110,36 +149,65 @@ const Profile: React.FC = () => {
       <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-amber-50 mt-10 animate-in fade-in slide-in-from-bottom-4">
         <div className="text-center mb-8">
             <div className="bg-amber-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-900 shadow-inner">
-                {isOtpMode ? <ShieldCheck size={30} /> : <Smartphone size={30} />}
+                {isOtpMode ? <ShieldCheck size={30} className="animate-pulse text-amber-900" /> : <Smartphone size={30} />}
             </div>
             <h2 className="text-2xl font-black text-amber-900">
-            {isOtpMode ? 'Код из письма' : (isLoginMode ? 'Вход в систему' : 'Новый гость')}
+            {isOtpMode ? 'Подтверждение' : (isLoginMode ? 'Вход в систему' : 'Новый гость')}
             </h2>
-            <p className="text-gray-400 text-xs mt-2 uppercase tracking-widest font-bold">Чайхана Жулебино</p>
+            <p className="text-gray-400 text-[10px] mt-2 uppercase tracking-[0.3em] font-black">Чайхана Жулебино</p>
         </div>
 
         {authError && (
-          <div className={`mb-6 p-4 rounded-2xl flex gap-3 text-xs font-bold animate-shake ${isOtpMode && !authError.includes('Неверный') ? 'bg-amber-50 border border-amber-100 text-amber-800' : 'bg-red-50 border border-red-100 text-red-600'}`}>
+          <div className={`mb-6 p-4 rounded-2xl flex gap-3 text-xs font-bold animate-in slide-in-from-top-2 ${isOtpMode && !authError.includes('Неверный') && !authError.includes('Введите') ? 'bg-amber-50 border border-amber-100 text-amber-800' : 'bg-red-50 border border-red-100 text-red-600'}`}>
             <AlertCircle size={18} className="shrink-0" />
             <p>{authError}</p>
           </div>
         )}
 
-        <form onSubmit={handleAuth} className="space-y-4">
+        <form onSubmit={handleAuth} className="space-y-6">
           {isOtpMode ? (
-            <div className="space-y-6">
-              <div className="relative">
+            <div className="space-y-8">
+              <div className="relative group cursor-text" onClick={() => otpInputRef.current?.focus()}>
+                {/* Visual OTP Slots */}
+                <div className="flex justify-between gap-2">
+                  {[...Array(6)].map((_, i) => (
+                    <div 
+                      key={i} 
+                      className={`w-12 h-16 flex items-center justify-center rounded-2xl border-2 text-3xl font-black transition-all duration-300 ${
+                        formData.otpCode.length === i ? 'border-amber-900 bg-amber-50 shadow-lg scale-105' : 
+                        formData.otpCode.length > i ? 'border-amber-900 bg-white' : 'border-gray-100 bg-gray-50 text-gray-200'
+                      }`}
+                    >
+                      {formData.otpCode[i] || '•'}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Hidden Real Input */}
                 <input 
+                  ref={otpInputRef}
                   type="text" 
-                  placeholder="000000" 
-                  maxLength={6}
-                  className="w-full p-6 bg-gray-50 border-4 border-amber-100 rounded-3xl focus:border-amber-500 focus:bg-white outline-none text-center text-4xl font-black tracking-[0.4em] transition-all shadow-inner" 
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="\d{6}"
+                  className="absolute inset-0 opacity-0 cursor-default"
                   value={formData.otpCode} 
-                  onChange={e => setFormData({...formData, otpCode: e.target.value.replace(/\D/g, '')})} 
+                  onChange={handleOtpChange} 
                   required 
                   autoFocus
                 />
-                <p className="text-center text-[10px] text-amber-800/40 mt-4 font-black uppercase tracking-widest">Введите 6 цифр из письма</p>
+              </div>
+              
+              <div className="flex flex-col items-center gap-4">
+                <button 
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={resendTimer > 0 || isAuthProcessing}
+                  className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-colors ${resendTimer > 0 ? 'text-gray-300' : 'text-amber-900 hover:text-orange-600'}`}
+                >
+                  <RefreshCcw size={14} className={isAuthProcessing ? 'animate-spin' : ''} />
+                  {resendTimer > 0 ? `Отправить код снова через ${resendTimer}с` : 'Отправить код повторно'}
+                </button>
               </div>
             </div>
           ) : (
@@ -147,9 +215,9 @@ const Profile: React.FC = () => {
               {isLoginMode ? (
                 <div className="relative">
                   <input 
-                    type="text" 
+                    type="email" 
                     placeholder="Email" 
-                    className="w-full p-4 pl-12 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none transition" 
+                    className="w-full p-4 pl-12 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none transition font-medium" 
                     value={formData.identifier} 
                     onChange={e => setFormData({...formData, identifier: e.target.value})} 
                     required 
@@ -161,7 +229,7 @@ const Profile: React.FC = () => {
                   <input 
                     type="text" 
                     placeholder="Ваше имя" 
-                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none" 
+                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none font-medium" 
                     value={formData.name} 
                     onChange={e => setFormData({...formData, name: e.target.value})} 
                     required 
@@ -169,7 +237,7 @@ const Profile: React.FC = () => {
                   <input 
                     type="email" 
                     placeholder="Email" 
-                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none" 
+                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none font-medium" 
                     value={formData.email} 
                     onChange={e => setFormData({...formData, email: e.target.value})} 
                     required 
@@ -177,7 +245,7 @@ const Profile: React.FC = () => {
                   <input 
                     type="tel" 
                     placeholder="Номер телефона" 
-                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none" 
+                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none font-medium" 
                     value={formData.phone} 
                     onChange={e => setFormData({...formData, phone: e.target.value})} 
                     required 
@@ -189,7 +257,7 @@ const Profile: React.FC = () => {
                 <input 
                   type="password" 
                   placeholder="Пароль" 
-                  className="w-full p-4 pl-12 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none transition" 
+                  className="w-full p-4 pl-12 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none transition font-medium" 
                   value={formData.password} 
                   onChange={e => setFormData({...formData, password: e.target.value})} 
                   required 
@@ -223,26 +291,25 @@ const Profile: React.FC = () => {
             disabled={isAuthProcessing || (!isLoginMode && !isOtpMode && !agreedToPolicy)}
             className="w-full bg-amber-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-amber-800 transition shadow-lg transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {isAuthProcessing && <Loader2 className="animate-spin" size={20} />}
-            {isOtpMode ? 'Подтвердить код' : (isLoginMode ? 'Войти' : 'Создать аккаунт')}
+            {isAuthProcessing ? <Loader2 className="animate-spin" size={20} /> : (isOtpMode ? 'Подтвердить код' : (isLoginMode ? 'Войти' : 'Создать аккаунт'))}
           </button>
         </form>
         
-        <div className="mt-6 flex flex-col gap-3">
+        <div className="mt-8 flex flex-col gap-3">
           {isOtpMode ? (
             <button 
               onClick={() => { setIsOtpMode(false); setAuthError(null); }} 
-              className="w-full text-center text-gray-400 text-xs font-black hover:text-amber-900 uppercase tracking-tighter flex items-center justify-center gap-2"
+              className="w-full text-center text-gray-400 text-[10px] font-black hover:text-amber-900 uppercase tracking-widest flex items-center justify-center gap-2"
             >
-              <ArrowLeft size={14} /> Вернуться назад
+              <ArrowLeft size={14} /> Изменить данные или Email
             </button>
           ) : (
             <button 
               onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(null); }} 
               disabled={isAuthProcessing}
-              className="w-full text-center text-amber-800 text-sm font-black hover:underline uppercase tracking-tighter"
+              className="w-full text-center text-amber-800 text-xs font-black hover:underline uppercase tracking-widest"
             >
-              {isLoginMode ? 'Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+              {isLoginMode ? 'Еще не с нами? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
             </button>
           )}
         </div>
@@ -252,7 +319,7 @@ const Profile: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-700">
-      <div className="bg-white p-8 rounded-3xl shadow-sm border border-amber-50 flex flex-col md:flex-row items-center gap-8">
+      <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-amber-50 flex flex-col md:flex-row items-center gap-8">
         <div className="w-28 h-28 bg-gradient-to-br from-amber-100 to-orange-100 rounded-full flex items-center justify-center text-amber-900 shadow-inner">
           <UserIcon size={48} />
         </div>
@@ -269,7 +336,7 @@ const Profile: React.FC = () => {
         </div>
         <button 
           onClick={signOut} 
-          className="flex items-center gap-2 px-6 py-3 bg-red-50 text-red-600 font-black text-sm uppercase rounded-2xl hover:bg-red-100 transition"
+          className="flex items-center gap-2 px-6 py-3 bg-red-50 text-red-600 font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-red-100 transition"
         >
           <LogOut size={20} /> Выход
         </button>
@@ -286,13 +353,13 @@ const Profile: React.FC = () => {
         {isLoadingOrders ? (
           <div className="flex justify-center py-10"><Loader2 className="animate-spin text-amber-900" size={32} /></div>
         ) : orders.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-amber-100">
+          <div className="text-center py-20 bg-white rounded-[3rem] border-2 border-dashed border-amber-100">
             <p className="text-gray-400 font-bold">У вас пока нет активных заказов</p>
           </div>
         ) : (
           <div className="grid gap-4">
             {orders.map(order => (
-              <div key={order.id} className="bg-white p-6 rounded-3xl border border-amber-50 shadow-sm hover:shadow-md transition-shadow">
+              <div key={order.id} className="bg-white p-6 rounded-[2rem] border border-amber-50 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -312,7 +379,7 @@ const Profile: React.FC = () => {
                 </div>
                 <div className="text-xs text-gray-500 bg-amber-50/50 p-3 rounded-xl border border-amber-100/50">
                   <p className="font-medium line-clamp-2">
-                    {Array.isArray(order.items) ? order.items.map((it: any) => `${it.dish?.name} x${it.quantity}`).join(', ') : 'Информация о блюдах'}
+                    {Array.isArray(order.items) ? order.items.map((it: any) => `${it.dish?.name || 'Блюдо'} x${it.quantity}`).join(', ') : 'Информация о блюдах'}
                   </p>
                 </div>
               </div>
