@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Info } from 'lucide-react';
-import { supabase, MOCK_DISHES } from '../supabaseClient';
-import { Dish } from './types';
-import { useCart } from '../contexts/CartContext';
-import Modal from '../components/ui/Modal';
+import { supabase, MOCK_DISHES } from '../supabaseClient.ts';
+import { Dish } from './types.ts';
+import { useCart } from '../contexts/CartContext.tsx';
+import Modal from '../components/ui/Modal.tsx';
 
 const CATEGORIES = [
   { id: 'all', label: 'Все' },

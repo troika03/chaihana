@@ -1,13 +1,13 @@
 
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Layout from './components/Layout';
-import Home from './pages/Home';
-import Checkout from './pages/Checkout';
-import Admin from './pages/Admin';
-import Profile from './pages/Profile';
-import { CartProvider } from './contexts/CartContext';
-import { AuthProvider } from './contexts/AuthContext';
+import Layout from './components/Layout.tsx';
+import Home from './pages/Home.tsx';
+import Checkout from './pages/Checkout.tsx';
+import Admin from './pages/Admin.tsx';
+import Profile from './pages/Profile.tsx';
+import { CartProvider } from './contexts/CartContext.tsx';
+import { AuthProvider } from './contexts/AuthContext.tsx';
 
 const PlaceholderPage = ({ title }: { title: string }) => (
   <div className="text-center py-20">

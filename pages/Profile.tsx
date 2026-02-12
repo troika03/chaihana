@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext.tsx';
+import { supabase } from '../supabaseClient.ts';
 import { LogOut, User as UserIcon, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle, ShieldCheck, ArrowLeft, Clock, MapPin } from 'lucide-react';
 
 const Profile: React.FC = () => {
@@ -131,6 +131,7 @@ const Profile: React.FC = () => {
                   onChange={e => setFormData({...formData, otpCode: e.target.value.replace(/\D/g, '')})} 
                   required 
                 />
+                <p className="text-center text-xs text-amber-800/60 mt-4 font-bold">Код отправлен на вашу почту</p>
               </div>
             </div>
           ) : (
