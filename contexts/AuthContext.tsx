@@ -68,56 +68,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const signIn = async (identifier: string, password: string) => {
-    let email = identifier;
-
-    // Простая проверка: если в строке нет '@', но есть цифры - считаем это телефоном
-    if (!identifier.includes('@') && /[0-9]/.test(identifier)) {
-      // Пытаемся найти email по телефону в таблице profiles
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('phone', identifier)
-        .single();
-
-      if (profile) {
-        // В Supabase Auth мы не можем напрямую получить email из auth.users по ID (из-за безопасности),
-        // но если мы доверяем системе, то просим пользователя использовать email.
-        // Чтобы сделать вход по телефону полноценным без SMS, нужно использовать Auth Hook в Supabase.
-        // Сейчас мы выдадим ошибку, если email не найден.
-        return { error: { message: "Для входа по номеру требуется SMS-подтверждение. Пожалуйста, используйте Email или настройте SMS в Supabase." } };
-      }
-    }
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ 
+      email: identifier, 
+      password 
+    });
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
     try {
-      // Регистрация с метаданными (триггер handle_new_user их подхватит)
+      // Подготавливаем телефон: если пустой, передаем null
+      const formattedPhone = phone?.trim() === '' ? null : phone?.trim();
+
       const { data, error: authError } = await supabase.auth.signUp({ 
         email, 
         password,
         options: { 
           data: { 
             full_name: fullName,
-            phone: phone
+            phone: formattedPhone
           } 
         }
       });
 
-      if (authError) {
-        return { error: authError };
-      }
+      if (authError) return { error: authError };
 
-      // На случай если триггер не сработал или задержался, пробуем создать профиль вручную
       if (data.user) {
+        // Пробуем создать профиль вручную на случай задержки триггера
         await supabase
           .from('profiles')
           .upsert({ 
             id: data.user.id, 
             full_name: fullName, 
-            phone: phone, 
+            phone: formattedPhone, 
             address: address, 
             role: 'user' 
           });

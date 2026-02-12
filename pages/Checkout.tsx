@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+// Correctly import useNavigate from react-router-dom
 import { useNavigate } from 'react-router-dom';
 import { Trash2, CreditCard, Wallet, ArrowRight, Minus, Plus } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';

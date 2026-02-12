@@ -1,4 +1,6 @@
+
 import React from 'react';
+// Correctly import HashRouter, Routes, Route, and Navigate from react-router-dom
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
