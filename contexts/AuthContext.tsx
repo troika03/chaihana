@@ -24,21 +24,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          console.warn("Auth check error:", sessionError.message);
-          setIsLoading(false);
-          return;
-        }
-        
+        const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          await fetchOrCreateProfile(session.user);
+          await fetchProfile(session.user.id);
         } else {
           setIsLoading(false);
         }
       } catch (e) {
-        console.error("Critical Auth error:", e);
+        console.error("Auth init error", e);
         setIsLoading(false);
       }
     };
@@ -47,53 +40,43 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        await fetchOrCreateProfile(session.user);
+        await fetchProfile(session.user.id);
       } else {
         setUser(null);
         setIsLoading(false);
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
-  const fetchOrCreateProfile = async (supabaseUser: any) => {
+  const fetchProfile = async (uid: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', supabaseUser.id)
+        .eq('id', uid)
         .maybeSingle(); 
       
-      if (error) {
-        console.error("Profile fetching failed:", error.message);
-        return;
-      }
-
-      if (data) {
+      if (!error && data) {
         setUser(data as UserProfile);
-      } else {
-        const newProfile = {
-          id: supabaseUser.id,
-          full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Новый гость',
-          phone: supabaseUser.user_metadata?.phone || '',
-          address: '',
-          role: 'user'
-        };
-        const { data: created } = await supabase
-          .from('profiles')
-          .upsert(newProfile)
-          .select()
-          .maybeSingle();
-        
-        if (created) {
-          setUser(created as UserProfile);
+      } else if (!data) {
+        // Если профиля нет, создаем его на лету
+        const { data: { user: sbUser } } = await supabase.auth.getUser();
+        if (sbUser) {
+           const newProfile = {
+             id: sbUser.id,
+             full_name: sbUser.user_metadata?.full_name || 'Гость',
+             phone: sbUser.user_metadata?.phone || '',
+             address: '',
+             role: 'user'
+           };
+           await supabase.from('profiles').upsert(newProfile);
+           setUser(newProfile as UserProfile);
         }
       }
     } catch (err) {
-      console.error('Profile Logic Exception:', err);
+      console.error('Error in fetchProfile:', err);
     } finally {
       setIsLoading(false);
     }
@@ -106,35 +89,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signInWithGoogle = async () => {
     return await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin
-      }
+      options: { redirectTo: window.location.origin }
     });
   };
 
   const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
-    try {
-      const { data, error: authError } = await supabase.auth.signUp({ 
-        email, 
-        password,
-        options: { data: { full_name: fullName, phone } }
-      });
-
-      if (authError) return { error: authError };
-
-      if (data.user) {
-        await supabase.from('profiles').upsert({ 
-          id: data.user.id, 
-          full_name: fullName, 
-          phone, 
-          address, 
-          role: 'user' 
-        });
-      }
-      return { error: null };
-    } catch (err: any) {
-      return { error: err };
+    const { data, error } = await supabase.auth.signUp({ 
+      email, 
+      password,
+      options: { data: { full_name: fullName, phone } }
+    });
+    if (data.user && !error) {
+      await supabase.from('profiles').upsert({ id: data.user.id, full_name: fullName, phone, address, role: 'user' });
     }
+    return { error };
   };
 
   const verifyOTP = async (email: string, token: string) => {
@@ -151,21 +119,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <div style={{ display: 'contents' }}>
-      <AuthContext.Provider value={{ 
-        user, 
-        isLoading, 
-        isAdmin: user?.role === 'admin', 
-        signIn, 
-        signInWithGoogle,
-        signUp, 
-        verifyOTP, 
-        resendOTP, 
-        signOut 
-      }}>
-        {children}
-      </AuthContext.Provider>
-    </div>
+    <AuthContext.Provider value={{ user, isLoading, isAdmin: user?.role === 'admin', signIn, signInWithGoogle, signUp, verifyOTP, resendOTP, signOut }}>
+      {children}
+    </AuthContext.Provider>
   );
 };
 
