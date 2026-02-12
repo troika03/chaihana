@@ -22,6 +22,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Страховочный таймаут: если за 10 секунд не удалось инициализироваться, 
+    // убираем лоадер, чтобы пользователь мог хотя бы видеть интерфейс.
+    const safetyTimer = setTimeout(() => {
+      if (isLoading) {
+        console.warn("Auth initialization timed out.");
+        setIsLoading(false);
+      }
+    }, 10000);
+
     const initAuth = async () => {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -54,12 +63,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchOrCreateProfile = async (supabaseUser: any) => {
     try {
-      // maybeSingle() корректно возвращает null, если записи нет, не выбрасывая ошибку 406
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -68,14 +79,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (error) {
         console.error("Profile fetching failed:", error.message);
-        setIsLoading(false);
         return;
       }
 
       if (data) {
         setUser(data as UserProfile);
       } else {
-        // Создаем базовый профиль, если его нет (например, после OAuth входа)
         const newProfile = {
           id: supabaseUser.id,
           full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Новый гость',
@@ -83,13 +92,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           address: '',
           role: 'user'
         };
-        const { data: created, error: createError } = await supabase
+        const { data: created } = await supabase
           .from('profiles')
           .upsert(newProfile)
           .select()
           .maybeSingle();
         
-        if (!createError && created) {
+        if (created) {
           setUser(created as UserProfile);
         }
       }

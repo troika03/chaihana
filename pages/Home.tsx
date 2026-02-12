@@ -32,6 +32,15 @@ const Home: React.FC = () => {
   const fetchDishes = async () => {
     setIsLoading(true);
     setError(null);
+    
+    // Fail-safe: если запрос не завершится за 10 секунд, прерываем лоадер
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        setIsLoading(false);
+        setError("Превышено время ожидания ответа от сервера.");
+      }
+    }, 10000);
+
     try {
       const { data, error: dbError } = await supabase
         .from('dishes')
@@ -46,15 +55,16 @@ const Home: React.FC = () => {
       let message = "Не удалось загрузить меню.";
       
       if (e.message?.includes('relation "dishes" does not exist')) {
-        message = "Таблица 'dishes' не найдена. Пожалуйста, выполните SQL-скрипт в панели Supabase SQL Editor.";
+        message = "Таблица 'dishes' не найдена. Пожалуйста, выполните SQL-скрипт в панели Supabase.";
       } else if (e.code === 'PGRST301') {
-        message = "Проект Supabase приостановлен (Paused). Зайдите в Dashboard и нажмите 'Restore'.";
-      } else if (e.name === 'AbortError') {
-        message = "Сервер не ответил вовремя. Возможно, база данных просыпается после долгого перерыва.";
+        message = "Проект Supabase приостановлен (Paused). Требуется восстановление в Dashboard.";
+      } else if (e.name === 'AbortError' || e.message?.includes('timeout')) {
+        message = "Сервер долго не отвечает. Попробуйте обновить страницу.";
       }
       
       setError(message);
     } finally {
+      clearTimeout(timer);
       setIsLoading(false);
     }
   };
@@ -122,14 +132,14 @@ const Home: React.FC = () => {
       ) : error ? (
         <div className="text-center py-20 bg-white rounded-[3rem] shadow-sm border border-red-100 max-w-lg mx-auto p-8">
           <AlertTriangle size={48} className="text-red-400 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Требуется настройка базы</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Ошибка подключения</h2>
           <p className="text-gray-500 mb-6 text-sm leading-relaxed">{error}</p>
           <div className="flex flex-col gap-3">
             <button 
               onClick={fetchDishes}
               className="bg-amber-900 text-white px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-800 transition flex items-center gap-2 mx-auto"
             >
-              <RefreshCw size={14} /> Обновить данные
+              <RefreshCw size={14} /> Повторить
             </button>
             <a 
               href="https://supabase.com/dashboard/project/lxxamuyljbchxbjavjiv/sql/new" 
@@ -137,14 +147,13 @@ const Home: React.FC = () => {
               rel="noreferrer"
               className="text-amber-900 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 justify-center hover:text-orange-600"
             >
-              <Database size={14} /> Открыть SQL Editor
+              <Database size={14} /> SQL Editor
             </a>
           </div>
         </div>
       ) : filteredDishes.length === 0 ? (
         <div className="text-center py-40">
-          <p className="text-2xl font-black text-amber-950/20 uppercase">Меню пока пусто</p>
-          <p className="text-sm text-gray-400 mt-2">Добавьте блюда через панель администратора.</p>
+          <p className="text-2xl font-black text-amber-950/20 uppercase">Меню пусто</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
