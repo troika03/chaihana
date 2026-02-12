@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
-import { LogOut, User as UserIcon, MapPin, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { LogOut, User as UserIcon, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle, ShieldCheck, ArrowLeft, Clock, MapPin } from 'lucide-react';
 
 const Profile: React.FC = () => {
   const { user, signIn, signUp, verifyOTP, signOut, isLoading } = useAuth();
@@ -173,7 +173,7 @@ const Profile: React.FC = () => {
                     onChange={e => setFormData({...formData, phone: e.target.value})} 
                     required 
                   />
-                </>
+                </div>
               )}
               
               <div className="relative">
@@ -234,6 +234,9 @@ const Profile: React.FC = () => {
             <span className="flex items-center gap-2 bg-amber-50 text-amber-800 px-4 py-1.5 rounded-full text-xs font-black">
               <Phone size={14} /> {user.phone}
             </span>
+            <span className="flex items-center gap-2 bg-amber-50 text-amber-800 px-4 py-1.5 rounded-full text-xs font-black">
+              <MapPin size={14} /> {user.address || 'Адрес не указан'}
+            </span>
           </div>
         </div>
         <button 
@@ -244,7 +247,6 @@ const Profile: React.FC = () => {
         </button>
       </div>
       
-      {/* Orders history section */}
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <div className="bg-amber-900 p-2 rounded-xl text-white">
@@ -262,13 +264,28 @@ const Profile: React.FC = () => {
         ) : (
           <div className="grid gap-4">
             {orders.map(order => (
-              <div key={order.id} className="bg-white p-6 rounded-3xl border border-amber-50 shadow-sm">
-                <div className="flex justify-between items-center mb-4">
+              <div key={order.id} className="bg-white p-6 rounded-3xl border border-amber-50 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h4 className="font-black text-amber-950">Заказ #{order.id}</h4>
-                    <p className="text-[10px] text-gray-400 uppercase">{new Date(order.created_at).toLocaleString()}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-black text-amber-950">Заказ #{order.id}</h4>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                        order.status === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {order.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-gray-400 font-bold uppercase">
+                      <Clock size={12} />
+                      {new Date(order.created_at).toLocaleString('ru-RU')}
+                    </div>
                   </div>
-                  <span className="font-black text-amber-900">{order.total_amount} ₽</span>
+                  <span className="font-black text-xl text-amber-900">{order.total_amount} ₽</span>
+                </div>
+                <div className="text-xs text-gray-500 bg-amber-50/50 p-3 rounded-xl border border-amber-100/50">
+                  <p className="font-medium line-clamp-2">
+                    {Array.isArray(order.items) ? order.items.map((it: any) => `${it.dish?.name} x${it.quantity}`).join(', ') : 'Информация о блюдах'}
+                  </p>
                 </div>
               </div>
             ))}
