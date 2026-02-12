@@ -30,15 +30,20 @@ const Admin: React.FC = () => {
 
   const loadData = async () => {
     setIsLoading(true);
-    if (activeTab === 'orders' || activeTab === 'stats') {
-      const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-      setOrders(data || []);
+    try {
+      if (activeTab === 'orders' || activeTab === 'stats') {
+        const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+        setOrders(data || []);
+      }
+      if (activeTab === 'menu' || activeTab === 'stats') {
+        const { data } = await supabase.from('dishes').select('*').order('name', { ascending: true });
+        setDishes(data || []);
+      }
+    } catch (err) {
+      console.error("Ошибка загрузки данных:", err);
+    } finally {
+      setIsLoading(false);
     }
-    if (activeTab === 'menu' || activeTab === 'stats') {
-      const { data } = await supabase.from('dishes').select('*').order('name', { ascending: true });
-      setDishes(data || []);
-    }
-    setIsLoading(false);
   };
 
   const updateOrderStatus = async (orderId: number, newStatus: Order['status']) => {
@@ -53,12 +58,13 @@ const Admin: React.FC = () => {
     if (!editingDish) return;
 
     setIsLoading(true);
+    // Гарантируем наличие всех обязательных полей
     const dishData = {
-      name: editingDish.name,
-      price: editingDish.price,
-      category: editingDish.category,
-      description: editingDish.description,
-      image: editingDish.image,
+      name: editingDish.name || 'Без названия',
+      price: Number(editingDish.price) || 0,
+      category: editingDish.category || 'main', // Защита от null
+      description: editingDish.description || '',
+      image: editingDish.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500',
       available: editingDish.available ?? true
     };
 
@@ -73,9 +79,11 @@ const Admin: React.FC = () => {
 
     if (!error) {
       setIsDishModalOpen(false);
+      setEditingDish(null);
       loadData();
     } else {
-      alert('Ошибка: ' + error.message);
+      console.error('Ошибка Supabase:', error);
+      alert('Ошибка при сохранении: ' + error.message);
     }
     setIsLoading(false);
   };
@@ -84,6 +92,7 @@ const Admin: React.FC = () => {
     if (!confirm('Удалить это блюдо из меню?')) return;
     const { error } = await supabase.from('dishes').delete().eq('id', id);
     if (!error) loadData();
+    else alert('Ошибка при удалении: ' + error.message);
   };
 
   const toggleDishAvailability = async (dish: Dish) => {
@@ -103,7 +112,6 @@ const Admin: React.FC = () => {
     );
   }
 
-  // Расчет статистики
   const stats = {
     totalRevenue: orders.reduce((sum, o) => sum + (o.total_amount || 0), 0),
     totalOrders: orders.length,
@@ -127,7 +135,6 @@ const Admin: React.FC = () => {
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-2 p-1 bg-amber-100/50 rounded-2xl w-fit">
         {[
           { id: 'stats', label: 'Статистика', icon: <TrendingUp size={18} /> },
@@ -149,7 +156,6 @@ const Admin: React.FC = () => {
         ))}
       </div>
 
-      {/* Stats Tab */}
       {activeTab === 'stats' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Общая выручка" value={`${stats.totalRevenue.toLocaleString()} ₽`} icon={<TrendingUp className="text-green-600" />} />
@@ -159,7 +165,6 @@ const Admin: React.FC = () => {
         </div>
       )}
 
-      {/* Orders Tab */}
       {activeTab === 'orders' && (
         <div className="bg-white rounded-3xl shadow-sm border border-amber-50 overflow-hidden">
           <div className="overflow-x-auto">
@@ -220,13 +225,22 @@ const Admin: React.FC = () => {
         </div>
       )}
 
-      {/* Menu Tab */}
       {activeTab === 'menu' && (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-black text-amber-950">Блюда в меню ({dishes.length})</h3>
             <button 
-              onClick={() => { setEditingDish({ available: true }); setIsDishModalOpen(true); }}
+              onClick={() => { 
+                setEditingDish({ 
+                  available: true, 
+                  category: 'main', 
+                  name: '', 
+                  price: 0, 
+                  description: '', 
+                  image: '' 
+                }); 
+                setIsDishModalOpen(true); 
+              }}
               className="flex items-center gap-2 bg-orange-500 text-white px-6 py-2.5 rounded-2xl font-black shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition"
             >
               <Plus size={20} />
@@ -274,7 +288,6 @@ const Admin: React.FC = () => {
         </div>
       )}
 
-      {/* Dish Edit Modal */}
       <Modal 
         isOpen={isDishModalOpen} 
         onClose={() => setIsDishModalOpen(false)} 
@@ -306,6 +319,7 @@ const Admin: React.FC = () => {
             <div className="space-y-2">
               <label className="text-xs font-black uppercase text-amber-800 tracking-wider">Категория</label>
               <select 
+                required
                 className="w-full p-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-amber-500 outline-none"
                 value={editingDish?.category || 'main'}
                 onChange={e => setEditingDish({...editingDish, category: e.target.value as any})}
@@ -326,6 +340,7 @@ const Admin: React.FC = () => {
               className="w-full p-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-amber-500 outline-none"
               value={editingDish?.image || ''}
               onChange={e => setEditingDish({...editingDish, image: e.target.value})}
+              placeholder="https://..."
             />
           </div>
 
@@ -345,7 +360,7 @@ const Admin: React.FC = () => {
             className="w-full bg-amber-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-amber-800 transition shadow-lg mt-4 flex items-center justify-center gap-2"
           >
             {isLoading ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
-            Сохранить
+            {editingDish?.id ? 'Сохранить изменения' : 'Создать блюдо'}
           </button>
         </form>
       </Modal>
@@ -353,7 +368,6 @@ const Admin: React.FC = () => {
   );
 };
 
-// Вспомогательные компоненты
 const StatCard = ({ title, value, icon }: { title: string, value: string | number, icon: React.ReactNode }) => (
   <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-amber-50 flex items-center gap-4">
     <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-xl">
