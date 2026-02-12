@@ -24,13 +24,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        
         if (session?.user) {
           await fetchOrCreateProfile(session.user);
         } else {
           setIsLoading(false);
         }
       } catch (e) {
+        console.error("Auth init error:", e);
         setIsLoading(false);
       }
     };
@@ -51,18 +54,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const fetchOrCreateProfile = async (supabaseUser: any) => {
     try {
+      // Используем maybeSingle() вместо single(), чтобы не ловить ошибку 406, если записи нет
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .maybeSingle(); 
       
-      if (error) throw error;
+      if (error) {
+        console.error("Profile fetch error:", error);
+        return;
+      }
 
       if (data) {
         setUser(data as UserProfile);
       } else {
-        // Если профиля нет (первый вход через Google), создаем его
         const newProfile = {
           id: supabaseUser.id,
           full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Гость',
@@ -74,12 +80,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           .from('profiles')
           .upsert(newProfile)
           .select()
-          .single();
+          .maybeSingle();
         
-        if (!createError) setUser(created as UserProfile);
+        if (!createError && created) {
+          setUser(created as UserProfile);
+        }
       }
     } catch (err) {
-      console.error('Profile error:', err);
+      console.error('Critical Profile error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -137,19 +145,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isLoading, 
-      isAdmin: user?.role === 'admin', 
-      signIn, 
-      signInWithGoogle,
-      signUp, 
-      verifyOTP, 
-      resendOTP, 
-      signOut 
-    }}>
-      {children}
-    </AuthContext.Provider>
+    <div style={{ display: 'contents' }}>
+      <AuthContext.Provider value={{ 
+        user, 
+        isLoading, 
+        isAdmin: user?.role === 'admin', 
+        signIn, 
+        signInWithGoogle,
+        signUp, 
+        verifyOTP, 
+        resendOTP, 
+        signOut 
+      }}>
+        {children}
+      </AuthContext.Provider>
+    </div>
   );
 };
 

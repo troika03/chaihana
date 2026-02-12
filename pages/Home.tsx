@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Search, Plus, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react';
 import { supabase } from '../supabaseClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
@@ -28,13 +28,13 @@ const Home: React.FC = () => {
   useEffect(() => {
     fetchDishes();
     
-    // Fail-safe лоадера для Home
+    // Fail-safe лоадера: если за 10 секунд ничего не произошло, сбрасываем состояние
     const timer = setTimeout(() => {
-      if (isLoading && dishes.length === 0) {
+      if (isLoading) {
         setIsLoading(false);
-        setError("Превышено время ожидания. Проверьте подключение к БД.");
+        setError("Превышено время ожидания. Проверьте, активен ли проект в Supabase Dashboard (мог уйти в спящий режим).");
       }
-    }, 8000);
+    }, 10000);
     
     return () => clearTimeout(timer);
   }, []);
@@ -43,18 +43,30 @@ const Home: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
+      console.log("Fetching dishes...");
       const { data, error: dbError } = await supabase
         .from('dishes')
         .select('*')
         .order('name', { ascending: true });
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error("Supabase Error:", dbError);
+        throw dbError;
+      }
+      
       setDishes(data || []);
+      console.log("Dishes loaded:", data?.length);
     } catch (e: any) {
-      console.error("Ошибка загрузки меню:", e.message);
-      setError(e.message.includes('relation "dishes" does not exist') 
-        ? "Таблица 'dishes' не найдена в базе данных. Создайте её через SQL Editor."
-        : "Не удалось загрузить меню. Проверьте консоль или настройки Supabase.");
+      console.error("Catch error:", e);
+      let message = "Не удалось загрузить меню.";
+      if (e.message?.includes('relation "dishes" does not exist')) {
+        message = "Таблица 'dishes' не найдена. Создайте её в SQL Editor вашего Supabase проекта.";
+      } else if (e.message?.includes('fetch')) {
+        message = "Ошибка сети. Проверьте доступ к lxxamuyljbchxbjavjiv.supabase.co или настройки CORS.";
+      } else if (e.code === 'PGRST301') {
+        message = "Проект Supabase приостановлен или недоступен.";
+      }
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -117,27 +129,28 @@ const Home: React.FC = () => {
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-40 space-y-6">
-          <div className="relative">
-             <div className="w-16 h-16 border-4 border-amber-100 border-t-amber-900 rounded-full animate-spin"></div>
-          </div>
-          <p className="text-amber-900 font-black uppercase text-[10px] tracking-[0.2em] animate-pulse">Загрузка меню...</p>
+          <Loader2 className="animate-spin text-amber-900" size={48} />
+          <p className="text-amber-900 font-black uppercase text-[10px] tracking-[0.2em] animate-pulse">Устанавливаем связь с базой данных...</p>
         </div>
       ) : error ? (
         <div className="text-center py-20 bg-white rounded-[3rem] shadow-sm border border-red-100 max-w-lg mx-auto p-8">
           <AlertTriangle size={48} className="text-red-400 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-800 mb-2">Ошибка подключения</h2>
-          <p className="text-gray-500 mb-6 text-sm">{error}</p>
-          <button 
-            onClick={fetchDishes}
-            className="bg-amber-900 text-white px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-800 transition flex items-center gap-2 mx-auto"
-          >
-            <RefreshCw size={14} /> Повторить попытку
-          </button>
+          <p className="text-gray-500 mb-6 text-sm leading-relaxed">{error}</p>
+          <div className="space-y-4">
+            <button 
+              onClick={fetchDishes}
+              className="bg-amber-900 text-white px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-800 transition flex items-center gap-2 mx-auto"
+            >
+              <RefreshCw size={14} /> Повторить попытку
+            </button>
+            <p className="text-[9px] text-gray-300 uppercase font-bold">Убедитесь, что ваш IP не заблокирован и сервис Supabase работает</p>
+          </div>
         </div>
       ) : filteredDishes.length === 0 ? (
         <div className="text-center py-40">
-          <p className="text-2xl font-black text-amber-950/20 uppercase">База меню пуста</p>
-          <p className="text-xs text-gray-400 mt-2">Добавьте блюда в админ-панели или проверьте Supabase</p>
+          <p className="text-2xl font-black text-amber-950/20 uppercase">Ничего не найдено</p>
+          <p className="text-xs text-gray-400 mt-2">Попробуйте изменить категорию или поисковый запрос</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -183,7 +196,7 @@ const Home: React.FC = () => {
               <button 
                 onClick={handleAddToCart}
                 disabled={!selectedDish.available}
-                className="w-full bg-amber-950 text-white py-6 rounded-[2.5rem] font-black text-xl hover:bg-amber-800 transition"
+                className="w-full bg-amber-950 text-white py-6 rounded-[2.5rem] font-black text-xl hover:bg-amber-800 transition shadow-xl"
               >
                 {selectedDish.available ? `Добавить за ${selectedDish.price * quantity} ₽` : 'Нет в наличии'}
               </button>
