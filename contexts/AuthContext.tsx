@@ -25,7 +25,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const initAuth = async () => {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
+        
+        if (sessionError) {
+          console.warn("Auth check failed:", sessionError.message);
+          setIsLoading(false);
+          return;
+        }
         
         if (session?.user) {
           await fetchOrCreateProfile(session.user);
@@ -33,7 +38,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setIsLoading(false);
         }
       } catch (e) {
-        console.error("Auth init error:", e);
+        console.error("Critical Auth error:", e);
         setIsLoading(false);
       }
     };
@@ -54,7 +59,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const fetchOrCreateProfile = async (supabaseUser: any) => {
     try {
-      // Используем maybeSingle() вместо single(), чтобы не ловить ошибку 406, если записи нет
+      // maybeSingle() корректно возвращает null, если записи нет, не выбрасывая ошибку 406
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -62,16 +67,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .maybeSingle(); 
       
       if (error) {
-        console.error("Profile fetch error:", error);
+        console.error("Profile fetching failed:", error.message);
+        setIsLoading(false);
         return;
       }
 
       if (data) {
         setUser(data as UserProfile);
       } else {
+        // Создаем базовый профиль, если его нет (например, после OAuth входа)
         const newProfile = {
           id: supabaseUser.id,
-          full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Гость',
+          full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Новый гость',
           phone: supabaseUser.user_metadata?.phone || '',
           address: '',
           role: 'user'
@@ -87,7 +94,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       }
     } catch (err) {
-      console.error('Critical Profile error:', err);
+      console.error('Profile Logic Exception:', err);
     } finally {
       setIsLoading(false);
     }
