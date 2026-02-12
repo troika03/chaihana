@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
-import { Search, Plus, Loader2, UtensilsCrossed, RefreshCw, Coffee } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, Plus, Loader2, UtensilsCrossed, RefreshCw, Coffee, AlertTriangle } from 'lucide-react';
 import { supabase } from '../supabaseClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
+import { useAuth } from '../contexts/AuthContext.tsx';
 import Modal from '../components/ui/Modal.tsx';
 
 const CATEGORIES = [
@@ -23,15 +24,21 @@ const Home: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
   const [quantity, setQuantity] = useState(1);
+  
   const { addToCart } = useCart();
+  const { user } = useAuth();
 
-  useEffect(() => {
-    fetchDishes();
-  }, []);
+  const fetchDishes = useCallback(async () => {
+    // Если мы уже загрузили блюда и нет ошибки, не грузим заново
+    if (dishes.length > 0 && !error) return;
 
-  const fetchDishes = async () => {
     setIsLoading(true);
     setError(null);
+    
+    // Создаем контроллер для отмены запроса по таймауту (15 сек)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
       const { data, error: dbError } = await supabase
         .from('dishes')
@@ -42,11 +49,27 @@ const Home: React.FC = () => {
       setDishes(data || []);
     } catch (e: any) {
       console.error("Fetch error:", e);
-      setError("Не удалось загрузить меню. Возможно, база данных просыпается. Попробуйте обновить.");
+      if (e.name === 'AbortError') {
+        setError("Сервер отвечает слишком долго. Возможно, база данных просыпается. Пожалуйста, обновите страницу через минуту.");
+      } else {
+        setError("Не удалось загрузить меню. Проверьте соединение с интернетом или обновите страницу.");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
-  };
+  }, [dishes.length, error]);
+
+  useEffect(() => {
+    fetchDishes();
+  }, [fetchDishes]);
+
+  // Если пользователь вошел в систему, а меню было с ошибкой — пробуем еще раз
+  useEffect(() => {
+    if (user && error) {
+      fetchDishes();
+    }
+  }, [user, error, fetchDishes]);
 
   const filteredDishes = dishes.filter(dish => {
     const matchesCategory = activeCategory === 'all' || dish.category === activeCategory;
@@ -73,7 +96,10 @@ const Home: React.FC = () => {
           <Loader2 className="animate-spin text-amber-900" size={64} />
           <Coffee className="absolute inset-0 m-auto text-amber-900/30" size={24} />
         </div>
-        <p className="text-amber-950 font-black uppercase tracking-[0.3em] text-[10px]">Затапливаем тандыр...</p>
+        <div className="text-center space-y-2">
+          <p className="text-amber-950 font-black uppercase tracking-[0.3em] text-[10px]">Затапливаем тандыр...</p>
+          <p className="text-amber-900/20 text-[8px] font-bold uppercase tracking-widest">Первая загрузка может занять до 30 сек.</p>
+        </div>
       </div>
     );
   }
@@ -117,15 +143,16 @@ const Home: React.FC = () => {
 
       {error ? (
         <div className="text-center py-20 bg-white rounded-[3rem] border border-red-100 p-8 max-w-md mx-auto shadow-sm">
+          <AlertTriangle className="mx-auto text-red-500 mb-4" size={32} />
           <p className="text-red-500 font-bold mb-6 text-sm leading-relaxed">{error}</p>
-          <button onClick={fetchDishes} className="flex items-center gap-2 mx-auto bg-amber-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-800 transition">
-            <RefreshCw size={16} /> Обновить меню
+          <button onClick={() => fetchDishes()} className="flex items-center gap-2 mx-auto bg-amber-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-800 transition">
+            <RefreshCw size={16} /> Попробовать снова
           </button>
         </div>
       ) : filteredDishes.length === 0 ? (
         <div className="text-center py-40">
           <UtensilsCrossed size={64} className="mx-auto text-amber-900/5 mb-6" />
-          <p className="text-2xl font-black text-amber-950/20 uppercase tracking-[0.2em]">Меню пока пусто</p>
+          <p className="text-2xl font-black text-amber-950/20 uppercase tracking-[0.2em]">Ничего не нашли</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">

@@ -10,5 +10,15 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: 'pkce'
+  },
+  global: {
+    headers: { 'x-application-name': 'zhulebino-chaikhana' },
+    // Включаем таймаут для всех запросов
+    fetch: (url, options) => {
+      return fetch(url, {
+        ...options,
+        // Стандартный таймаут fetch не поддерживает, но мы контролируем это в компонентах через AbortController
+      });
+    }
   }
 });

@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../pages/types';
 
@@ -20,48 +20,30 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          await fetchOrCreateProfile(session.user);
-        } else {
-          setIsLoading(false);
-        }
-      } catch (e) {
-        console.error("Auth init error", e);
-        setIsLoading(false);
-      }
-    };
-
-    initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        await fetchOrCreateProfile(session.user);
-      } else {
-        setUser(null);
-        setIsLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const isFetchingProfile = useRef(false);
+  const lastFetchedId = useRef<string | null>(null);
 
   const fetchOrCreateProfile = async (supabaseUser: any) => {
+    // Предотвращаем множественные одновременные запросы для одного и того же пользователя
+    if (isFetchingProfile.current || (lastFetchedId.current === supabaseUser.id && user)) {
+      setIsLoading(false);
+      return;
+    }
+
+    isFetchingProfile.current = true;
+    lastFetchedId.current = supabaseUser.id;
+
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
-        .maybeSingle(); 
+        .maybeSingle();
       
       if (!error && data) {
         setUser(data as UserProfile);
       } else {
-        // Если профиля нет (например, первый вход через Google)
+        // Создаем профиль, если его нет (для входа через Google)
         const newProfile = {
           id: supabaseUser.id,
           full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Гость',
@@ -69,6 +51,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           address: '',
           role: 'user'
         };
+        
         const { data: created, error: createError } = await supabase
           .from('profiles')
           .upsert(newProfile)
@@ -78,22 +61,63 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!createError && created) {
           setUser(created as UserProfile);
         } else {
-          // Если возникла ошибка записи в БД, все равно устанавливаем локального пользователя
           setUser(newProfile as UserProfile);
         }
       }
     } catch (err) {
-      console.error('Profile fetch/create error:', err);
+      console.error('Критическая ошибка при загрузке профиля:', err);
     } finally {
+      isFetchingProfile.current = false;
       setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (isMounted) {
+          if (session?.user) {
+            await fetchOrCreateProfile(session.user);
+          } else {
+            setIsLoading(false);
+          }
+        }
+      } catch (e) {
+        console.error("Ошибка инициализации Auth:", e);
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (isMounted) {
+        if (session?.user) {
+          await fetchOrCreateProfile(session.user);
+        } else {
+          setUser(null);
+          lastFetchedId.current = null;
+          setIsLoading(false);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const signIn = async (identifier: string, password: string) => {
+    setIsLoading(true); // Показываем лоадер при ручном входе
     return await supabase.auth.signInWithPassword({ email: identifier, password });
   };
 
   const signInWithGoogle = async () => {
+    setIsLoading(true);
     return await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin }
@@ -111,14 +135,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (authError) return { error: authError };
 
       if (data.user) {
-        const { error: dbError } = await supabase.from('profiles').upsert({ 
+        await supabase.from('profiles').upsert({ 
           id: data.user.id, 
           full_name: fullName, 
           phone, 
           address, 
           role: 'user' 
         });
-        if (dbError) console.error("Profile creation error:", dbError);
       }
       return { error: null };
     } catch (err: any) {
@@ -135,12 +158,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const signOut = async () => {
+    setIsLoading(true);
     await supabase.auth.signOut();
     setUser(null);
+    lastFetchedId.current = null;
+    setIsLoading(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAdmin: user?.role === 'admin', signIn, signInWithGoogle, signUp, verifyOTP, resendOTP, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      isLoading, 
+      isAdmin: user?.role === 'admin', 
+      signIn, 
+      signInWithGoogle, 
+      signUp, 
+      verifyOTP, 
+      resendOTP, 
+      signOut 
+    }}>
       {children}
     </AuthContext.Provider>
   );
