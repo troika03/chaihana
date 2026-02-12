@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { supabase } from '../supabaseClient.ts';
-import { LogOut, User as UserIcon, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle, ShieldCheck, ArrowLeft, Clock, MapPin } from 'lucide-react';
+import { LogOut, User as UserIcon, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle, ShieldCheck, ArrowLeft, Clock, MapPin, CheckCircle } from 'lucide-react';
 
 const Profile: React.FC = () => {
   const { user, signIn, signUp, verifyOTP, signOut, isLoading } = useAuth();
@@ -12,6 +12,7 @@ const Profile: React.FC = () => {
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [isOtpMode, setIsOtpMode] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [agreedToPolicy, setAgreedToPolicy] = useState(false);
   
   const [formData, setFormData] = useState({ 
     identifier: '', 
@@ -52,6 +53,12 @@ const Profile: React.FC = () => {
     e.preventDefault();
     if (isAuthProcessing) return;
 
+    // Валидация политики при регистрации
+    if (!isLoginMode && !isOtpMode && !agreedToPolicy) {
+      setAuthError('Необходимо согласиться с политикой конфиденциальности');
+      return;
+    }
+
     setIsAuthProcessing(true);
     setAuthError(null);
     try {
@@ -59,7 +66,7 @@ const Profile: React.FC = () => {
         const emailToVerify = isLoginMode ? formData.identifier : formData.email;
         const { error } = await verifyOTP(emailToVerify, formData.otpCode);
         if (error) {
-          setAuthError('Неверный код подтверждения. Проверьте еще раз.');
+          setAuthError('Неверный код подтверждения. Попробуйте еще раз.');
         } else {
           setIsOtpMode(false);
         }
@@ -67,7 +74,7 @@ const Profile: React.FC = () => {
         const { error } = await signIn(formData.identifier, formData.password);
         if (error) {
           if (error.message.includes('Email not confirmed')) {
-            setAuthError('Email не подтвержден. Введите код из письма ниже.');
+            setAuthError('Email не подтвержден. Введите 6-значный код из письма.');
             setIsOtpMode(true);
           } else {
             setAuthError('Неверный email или пароль');
@@ -106,7 +113,7 @@ const Profile: React.FC = () => {
                 {isOtpMode ? <ShieldCheck size={30} /> : <Smartphone size={30} />}
             </div>
             <h2 className="text-2xl font-black text-amber-900">
-            {isOtpMode ? 'Введите код' : (isLoginMode ? 'Вход в систему' : 'Новый гость')}
+            {isOtpMode ? 'Код из письма' : (isLoginMode ? 'Вход в систему' : 'Новый гость')}
             </h2>
             <p className="text-gray-400 text-xs mt-2 uppercase tracking-widest font-bold">Чайхана Жулебино</p>
         </div>
@@ -124,14 +131,15 @@ const Profile: React.FC = () => {
               <div className="relative">
                 <input 
                   type="text" 
-                  placeholder="6-значный код" 
+                  placeholder="000000" 
                   maxLength={6}
-                  className="w-full p-5 bg-gray-50 border-2 border-amber-100 rounded-2xl focus:border-amber-500 outline-none text-center text-2xl font-black tracking-[0.5em] transition" 
+                  className="w-full p-6 bg-gray-50 border-4 border-amber-100 rounded-3xl focus:border-amber-500 focus:bg-white outline-none text-center text-4xl font-black tracking-[0.4em] transition-all shadow-inner" 
                   value={formData.otpCode} 
                   onChange={e => setFormData({...formData, otpCode: e.target.value.replace(/\D/g, '')})} 
                   required 
+                  autoFocus
                 />
-                <p className="text-center text-xs text-amber-800/60 mt-4 font-bold">Код отправлен на вашу почту</p>
+                <p className="text-center text-[10px] text-amber-800/40 mt-4 font-black uppercase tracking-widest">Введите 6 цифр из письма</p>
               </div>
             </div>
           ) : (
@@ -188,16 +196,35 @@ const Profile: React.FC = () => {
                 />
                 <Lock className="absolute left-4 top-4 text-gray-400" size={20} />
               </div>
+
+              {!isLoginMode && (
+                <div className="py-2">
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <div className="relative flex items-center justify-center mt-1">
+                      <input 
+                        type="checkbox" 
+                        className="peer h-5 w-5 cursor-pointer appearance-none rounded border-2 border-amber-200 bg-white transition-all checked:bg-amber-900 checked:border-amber-900"
+                        checked={agreedToPolicy}
+                        onChange={e => setAgreedToPolicy(e.target.checked)}
+                      />
+                      <CheckCircle className="absolute text-white opacity-0 peer-checked:opacity-100 pointer-events-none" size={14} />
+                    </div>
+                    <span className="text-[11px] text-gray-500 font-medium leading-tight select-none">
+                      Я согласен с <a href="#" className="text-amber-900 underline font-bold">Политикой конфиденциальности</a> и условиями использования сайта Чайхана Жулебино.
+                    </span>
+                  </label>
+                </div>
+              )}
             </>
           )}
 
           <button 
             type="submit" 
-            disabled={isAuthProcessing}
-            className="w-full bg-amber-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-amber-800 transition shadow-lg transform active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
+            disabled={isAuthProcessing || (!isLoginMode && !isOtpMode && !agreedToPolicy)}
+            className="w-full bg-amber-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-amber-800 transition shadow-lg transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isAuthProcessing && <Loader2 className="animate-spin" size={20} />}
-            {isOtpMode ? 'Подтвердить' : (isLoginMode ? 'Войти' : 'Создать аккаунт')}
+            {isOtpMode ? 'Подтвердить код' : (isLoginMode ? 'Войти' : 'Создать аккаунт')}
           </button>
         </form>
         
@@ -207,7 +234,7 @@ const Profile: React.FC = () => {
               onClick={() => { setIsOtpMode(false); setAuthError(null); }} 
               className="w-full text-center text-gray-400 text-xs font-black hover:text-amber-900 uppercase tracking-tighter flex items-center justify-center gap-2"
             >
-              <ArrowLeft size={14} /> Назад
+              <ArrowLeft size={14} /> Вернуться назад
             </button>
           ) : (
             <button 
