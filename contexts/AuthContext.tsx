@@ -22,14 +22,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Страховочный таймаут: если за 10 секунд не удалось инициализироваться, 
-    // убираем лоадер, чтобы пользователь мог хотя бы видеть интерфейс.
+    // Таймаут 30 секунд для инициализации (время пробуждения бесплатной базы)
     const safetyTimer = setTimeout(() => {
       if (isLoading) {
-        console.warn("Auth initialization timed out.");
+        console.warn("Auth initialization timed out (database wake up).");
         setIsLoading(false);
       }
-    }, 10000);
+    }, 30000);
 
     const initAuth = async () => {
       try {

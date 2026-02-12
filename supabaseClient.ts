@@ -14,7 +14,8 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   global: {
     fetch: (url, options) => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 секунд - оптимально для мобильных сетей
+      // Увеличиваем до 30 секунд, так как спящий проект Supabase просыпается до 25 секунд
+      const timeoutId = setTimeout(() => controller.abort(), 30000); 
       
       return fetch(url, {
         ...options,

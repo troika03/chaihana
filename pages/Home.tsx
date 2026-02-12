@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, RefreshCw, AlertTriangle, Loader2, Database } from 'lucide-react';
+import { Search, Plus, RefreshCw, AlertTriangle, Loader2, Database, Coffee } from 'lucide-react';
 import { supabase } from '../supabaseClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
@@ -33,13 +33,13 @@ const Home: React.FC = () => {
     setIsLoading(true);
     setError(null);
     
-    // Fail-safe: если запрос не завершится за 10 секунд, прерываем лоадер
+    // Страховочный таймер на 35 секунд (чуть больше глобального в клиенте)
     const timer = setTimeout(() => {
       if (isLoading) {
         setIsLoading(false);
-        setError("Превышено время ожидания ответа от сервера.");
+        setError("Сервер долго не отвечает. Скорее всего, база данных 'просыпается'. Пожалуйста, подождите немного и обновите.");
       }
-    }, 10000);
+    }, 35000);
 
     try {
       const { data, error: dbError } = await supabase
@@ -54,12 +54,12 @@ const Home: React.FC = () => {
       console.error("Supabase Connection Error:", e);
       let message = "Не удалось загрузить меню.";
       
-      if (e.message?.includes('relation "dishes" does not exist')) {
-        message = "Таблица 'dishes' не найдена. Пожалуйста, выполните SQL-скрипт в панели Supabase.";
+      if (e.name === 'AbortError' || e.message?.includes('signal is aborted')) {
+        message = "База данных долго 'просыпалась' и соединение прервалось. Попробуйте еще раз — сейчас она должна быть готова.";
+      } else if (e.message?.includes('relation "dishes" does not exist')) {
+        message = "Таблица 'dishes' не найдена. Убедитесь, что вы создали таблицы в SQL Editor.";
       } else if (e.code === 'PGRST301') {
-        message = "Проект Supabase приостановлен (Paused). Требуется восстановление в Dashboard.";
-      } else if (e.name === 'AbortError' || e.message?.includes('timeout')) {
-        message = "Сервер долго не отвечает. Попробуйте обновить страницу.";
+        message = "Проект Supabase приостановлен. Восстановите его в панели управления.";
       }
       
       setError(message);
@@ -126,34 +126,32 @@ const Home: React.FC = () => {
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-40 space-y-6">
-          <Loader2 className="animate-spin text-amber-900" size={48} />
-          <p className="text-amber-900 font-black uppercase text-[10px] tracking-[0.2em] animate-pulse">Соединение с Чайханой...</p>
+          <div className="relative">
+            <Loader2 className="animate-spin text-amber-900" size={64} />
+            <Coffee className="absolute inset-0 m-auto text-amber-900/30" size={24} />
+          </div>
+          <div className="text-center">
+            <p className="text-amber-900 font-black uppercase text-[10px] tracking-[0.2em] animate-pulse">Затапливаем тандыр...</p>
+            <p className="text-[9px] text-gray-400 mt-2 max-w-[200px] mx-auto uppercase">Если загрузка идет дольше 20 секунд, значит база данных просыпается</p>
+          </div>
         </div>
       ) : error ? (
         <div className="text-center py-20 bg-white rounded-[3rem] shadow-sm border border-red-100 max-w-lg mx-auto p-8">
           <AlertTriangle size={48} className="text-red-400 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Ошибка подключения</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Нужно подождать</h2>
           <p className="text-gray-500 mb-6 text-sm leading-relaxed">{error}</p>
           <div className="flex flex-col gap-3">
             <button 
               onClick={fetchDishes}
-              className="bg-amber-900 text-white px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-800 transition flex items-center gap-2 mx-auto"
+              className="bg-amber-900 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-800 transition flex items-center justify-center gap-2 mx-auto w-full"
             >
-              <RefreshCw size={14} /> Повторить
+              <RefreshCw size={14} /> Разбудить кухню
             </button>
-            <a 
-              href="https://supabase.com/dashboard/project/lxxamuyljbchxbjavjiv/sql/new" 
-              target="_blank" 
-              rel="noreferrer"
-              className="text-amber-900 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 justify-center hover:text-orange-600"
-            >
-              <Database size={14} /> SQL Editor
-            </a>
           </div>
         </div>
       ) : filteredDishes.length === 0 ? (
         <div className="text-center py-40">
-          <p className="text-2xl font-black text-amber-950/20 uppercase">Меню пусто</p>
+          <p className="text-2xl font-black text-amber-950/20 uppercase">Меню пока пусто</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
