@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
-import { LogOut, User as UserIcon, MapPin, Phone, Mail, Package, Lock, Loader2, Smartphone } from 'lucide-react';
+import { LogOut, User as UserIcon, MapPin, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle } from 'lucide-react';
 
 const Profile: React.FC = () => {
   const { user, signIn, signUp, signOut, isLoading } = useAuth();
@@ -10,9 +10,10 @@ const Profile: React.FC = () => {
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [isAuthProcessing, setIsAuthProcessing] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({ 
-    identifier: '', // Может быть email или телефон
+    identifier: '', 
     email: '', 
     password: '', 
     name: '', 
@@ -50,6 +51,7 @@ const Profile: React.FC = () => {
     if (isAuthProcessing) return;
 
     setIsAuthProcessing(true);
+    setAuthError(null);
     try {
       const { error } = isLoginMode 
         ? await signIn(formData.identifier, formData.password)
@@ -57,14 +59,20 @@ const Profile: React.FC = () => {
       
       if (error) {
         let msg = error.message;
-        if (msg === 'Invalid login credentials') msg = 'Неверные данные для входа';
-        alert('Ошибка: ' + msg);
+        if (msg.includes('Email not confirmed')) {
+          msg = 'Email не подтвержден. Пожалуйста, проверьте почту или отключите "Confirm Email" в настройках Supabase (Authentication -> Providers -> Email).';
+        } else if (msg === 'Invalid login credentials') {
+          msg = 'Неверный email или пароль';
+        } else if (msg.includes('User already registered')) {
+          msg = 'Пользователь с таким Email уже существует';
+        }
+        setAuthError(msg);
       } else if (!isLoginMode) {
-        alert('Успех! Теперь вы можете войти в систему.');
+        alert('Успех! Теперь вы можете войти (если отключено подтверждение почты) или проверьте ваш Email.');
         setIsLoginMode(true);
       }
     } catch (err: any) {
-      alert('Системная ошибка: ' + err.message);
+      setAuthError('Системная ошибка: ' + err.message);
     } finally {
       setIsAuthProcessing(false);
     }
@@ -92,19 +100,26 @@ const Profile: React.FC = () => {
             <p className="text-gray-400 text-xs mt-2 uppercase tracking-widest font-bold">Чайхана Жулебино</p>
         </div>
 
+        {authError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 text-red-600 text-xs font-bold animate-shake">
+            <AlertCircle size={18} className="shrink-0" />
+            <p>{authError}</p>
+          </div>
+        )}
+
         <form onSubmit={handleAuth} className="space-y-4">
           {isLoginMode ? (
             <div className="space-y-4">
               <div className="relative">
                 <input 
                   type="text" 
-                  placeholder="Email или Телефон" 
+                  placeholder="Email" 
                   className="w-full p-4 pl-12 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none transition" 
                   value={formData.identifier} 
                   onChange={e => setFormData({...formData, identifier: e.target.value})} 
                   required 
                 />
-                <UserIcon className="absolute left-4 top-4 text-gray-400" size={20} />
+                <Mail className="absolute left-4 top-4 text-gray-400" size={20} />
               </div>
             </div>
           ) : (
@@ -168,7 +183,7 @@ const Profile: React.FC = () => {
         </form>
         
         <button 
-          onClick={() => setIsLoginMode(!isLoginMode)} 
+          onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(null); }} 
           disabled={isAuthProcessing}
           className="w-full text-center mt-6 text-amber-800 text-sm font-black hover:underline uppercase tracking-tighter"
         >

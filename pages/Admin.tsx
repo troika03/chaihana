@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, MOCK_DISHES } from '../supabaseClient';
 import { Order, Dish } from './types';
-import { Plus, Edit2, Trash2, RefreshCw, AlertTriangle, Database, Copy, CheckCircle2, ShieldAlert } from 'lucide-react';
-// Correctly import useNavigate from react-router-dom
+import { Plus, Edit2, Trash2, RefreshCw, AlertTriangle, Database, Copy, CheckCircle2, ShieldAlert, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from '../components/ui/Modal';
@@ -46,7 +45,7 @@ create table if not exists public.orders (
   payment_status text default 'pending'
 );
 
--- 4. ИСПРАВЛЕННЫЙ ТРИГГЕР ДЛЯ НОВОГО ПРОЕКТА
+-- 4. ТРИГГЕР ДЛЯ АВТО-ПРОФИЛЯ
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
@@ -80,7 +79,7 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- 5. ПРАВИЛА БЕЗОПАСНОСТИ (RLS)
+-- 5. RLS (БЕЗОПАСНОСТЬ)
 alter table public.dishes enable row level security;
 create policy "Public read dishes" on public.dishes for select using (true);
 create policy "Admins manage dishes" on public.dishes for all using (
@@ -196,7 +195,7 @@ const Admin: React.FC = () => {
           <div className="bg-red-600 text-white p-4 rounded-2xl flex items-center justify-between shadow-lg animate-pulse">
               <div className="flex items-center gap-3">
                   <ShieldAlert size={24} />
-                  <span className="font-bold text-sm">База данных требует настройки SQL на новом проекте!</span>
+                  <span className="font-bold text-sm">Требуется настройка базы данных!</span>
               </div>
               <button onClick={() => setActiveTab('db')} className="bg-white text-red-600 px-4 py-1.5 rounded-xl font-black text-xs uppercase">Исправить</button>
           </div>
@@ -222,20 +221,33 @@ const Admin: React.FC = () => {
 
       {activeTab === 'db' && (
           <div className="space-y-6 animate-in slide-in-from-bottom-4">
+              {/* Блок исправления ошибки подтверждения Email */}
+              <div className="bg-orange-50 border-2 border-orange-200 p-8 rounded-[2.5rem] shadow-sm">
+                  <div className="flex items-center gap-4 text-orange-900 mb-4">
+                      <Settings size={32} />
+                      <h2 className="text-2xl font-black">Ошибка: Email not confirmed</h2>
+                  </div>
+                  <p className="text-sm text-orange-800 font-medium mb-6 leading-relaxed">
+                      Чтобы ваши гости могли заходить сразу без подтверждения почты, перейдите в <b>Supabase Dashboard</b>:
+                      <br /><br />
+                      <b>Authentication</b> -> <b>Providers</b> -> <b>Email</b> -> Снимите галочку с <b>"Confirm email"</b>.
+                  </p>
+              </div>
+
               <div className="bg-white border-2 border-amber-100 p-8 rounded-[2.5rem] shadow-lg">
                   <div className="flex items-center gap-4 text-amber-900 mb-6">
                       <div className="bg-amber-100 p-3 rounded-2xl">
                         <Database size={32} />
                       </div>
                       <div>
-                        <h2 className="text-2xl font-black">Новый проект Supabase</h2>
-                        <p className="text-sm text-amber-600 font-medium italic">Выполните этот код для создания таблиц</p>
+                        <h2 className="text-2xl font-black">Создание таблиц</h2>
+                        <p className="text-sm text-amber-600 font-medium italic">Выполните код в SQL Editor</p>
                       </div>
                   </div>
 
                   <div className="bg-gray-900 text-gray-300 p-6 rounded-3xl relative overflow-hidden">
                       <div className="flex justify-between items-center mb-4">
-                        <p className="text-xs font-black uppercase tracking-widest text-gray-500">SQL Скрипт (Ultimate)</p>
+                        <p className="text-xs font-black uppercase tracking-widest text-gray-500">SQL Скрипт</p>
                         <button 
                             onClick={handleCopySQL}
                             className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl transition flex items-center gap-2 text-xs font-bold"
@@ -264,12 +276,11 @@ const Admin: React.FC = () => {
               </div>
               <div className="bg-white p-8 rounded-3xl border border-amber-50 shadow-sm border-b-4 border-b-green-500">
                   <h4 className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-2">Выручка</h4>
-                  <p className="text-4xl font-black text-green-700">{orders.reduce((acc, o) => acc + o.total_amount, 0)} ₽</p>
+                  <p className="text-4xl font-black text-green-700">{orders.reduce((acc, o) => acc + (o.total_amount || 0), 0)} ₽</p>
               </div>
           </div>
       )}
 
-      {/* Отрисовка Меню и Заказов аналогично предыдущей версии */}
       {activeTab === 'menu' && (
           <div className="space-y-6 animate-in slide-in-from-bottom-4">
               <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-amber-50 shadow-sm">
@@ -298,6 +309,52 @@ const Admin: React.FC = () => {
               </div>
           </div>
       )}
+
+      {activeTab === 'orders' && (
+          <div className="space-y-6 animate-in slide-in-from-bottom-4">
+              {orders.map(order => (
+                  <div key={order.id} className="bg-white p-6 rounded-3xl border border-amber-50 shadow-sm">
+                      <div className="flex justify-between items-start mb-4">
+                          <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-lg font-black text-amber-950">Заказ #{order.id}</h4>
+                                <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-black uppercase">{order.status}</span>
+                              </div>
+                              <p className="text-xs text-gray-400 font-bold">{new Date(order.created_at).toLocaleString()}</p>
+                          </div>
+                          <div className="text-right">
+                              <p className="text-xl font-black text-amber-900">{order.total_amount} ₽</p>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase">{order.payment_method === 'card' ? 'Картой' : 'Наличными'}</p>
+                          </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-amber-50 pt-4">
+                          <div>
+                              <p className="text-[10px] font-black uppercase text-gray-400">Доставка</p>
+                              <p className="text-sm font-bold text-amber-950">{order.delivery_address}</p>
+                              <p className="text-xs text-amber-700 font-medium">{order.contact_phone}</p>
+                          </div>
+                          <div className="flex gap-2 items-center justify-end">
+                              <select 
+                                value={order.status}
+                                onChange={async (e) => {
+                                    await supabase.from('orders').update({status: e.target.value}).eq('id', order.id);
+                                    await loadAllData();
+                                }}
+                                className="bg-gray-50 p-2 rounded-xl text-xs font-bold border-none outline-none"
+                              >
+                                  <option value="pending">Ожидание</option>
+                                  <option value="confirmed">Принят</option>
+                                  <option value="cooking">Готовится</option>
+                                  <option value="delivering">В пути</option>
+                                  <option value="delivered">Доставлен</option>
+                                  <option value="cancelled">Отменен</option>
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+              ))}
+          </div>
+      )}
       
       <Modal isOpen={isDishModalOpen} onClose={() => setIsDishModalOpen(false)} title={editingDish.id ? 'Изменить блюдо' : 'Новое блюдо'}>
           <div className="space-y-4">
@@ -309,7 +366,21 @@ const Admin: React.FC = () => {
                   <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Цена (₽)</label>
                   <input type="number" className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none" value={editingDish.price || ''} onChange={e => setEditingDish({...editingDish, price: Number(e.target.value)})} />
               </div>
-              <button onClick={saveDish} className="w-full bg-amber-900 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-amber-800 transition">
+              <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Категория</label>
+                  <select className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none" value={editingDish.category || 'main'} onChange={e => setEditingDish({...editingDish, category: e.target.value as any})}>
+                      <option value="main">Основные</option>
+                      <option value="soups">Супы</option>
+                      <option value="salads">Салаты</option>
+                      <option value="drinks">Напитки</option>
+                      <option value="desserts">Десерты</option>
+                  </select>
+              </div>
+              <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Ссылка на фото</label>
+                  <input className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none" value={editingDish.image || ''} onChange={e => setEditingDish({...editingDish, image: e.target.value})} />
+              </div>
+              <button onClick={saveDish} className="w-full bg-amber-900 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-amber-800 transition">
                   Сохранить
               </button>
           </div>
