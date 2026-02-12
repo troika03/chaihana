@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-// Correctly import Link and useLocation from react-router-dom
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, ShoppingCart, User, Phone, UtensilsCrossed, Settings } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';

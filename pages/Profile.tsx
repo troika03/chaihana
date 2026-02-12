@@ -2,14 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
-import { LogOut, User as UserIcon, MapPin, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle } from 'lucide-react';
+import { LogOut, User as UserIcon, MapPin, Phone, Mail, Package, Lock, Loader2, Smartphone, AlertCircle, ShieldCheck, ArrowLeft } from 'lucide-react';
 
 const Profile: React.FC = () => {
-  const { user, signIn, signUp, signOut, isLoading } = useAuth();
+  const { user, signIn, signUp, verifyOTP, signOut, isLoading } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [isAuthProcessing, setIsAuthProcessing] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
+  const [isOtpMode, setIsOtpMode] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({ 
@@ -18,7 +19,8 @@ const Profile: React.FC = () => {
     password: '', 
     name: '', 
     phone: '', 
-    address: '' 
+    address: '',
+    otpCode: ''
   });
 
   useEffect(() => {
@@ -53,23 +55,32 @@ const Profile: React.FC = () => {
     setIsAuthProcessing(true);
     setAuthError(null);
     try {
-      const { error } = isLoginMode 
-        ? await signIn(formData.identifier, formData.password)
-        : await signUp(formData.email, formData.password, formData.name, formData.phone, formData.address);
-      
-      if (error) {
-        let msg = error.message;
-        if (msg.includes('Email not confirmed')) {
-          msg = 'Email не подтвержден. Пожалуйста, проверьте почту или отключите "Confirm Email" в настройках Supabase (Authentication -> Providers -> Email).';
-        } else if (msg === 'Invalid login credentials') {
-          msg = 'Неверный email или пароль';
-        } else if (msg.includes('User already registered')) {
-          msg = 'Пользователь с таким Email уже существует';
+      if (isOtpMode) {
+        const emailToVerify = isLoginMode ? formData.identifier : formData.email;
+        const { error } = await verifyOTP(emailToVerify, formData.otpCode);
+        if (error) {
+          setAuthError('Неверный код подтверждения. Проверьте еще раз.');
+        } else {
+          setIsOtpMode(false);
         }
-        setAuthError(msg);
-      } else if (!isLoginMode) {
-        alert('Успех! Теперь вы можете войти (если отключено подтверждение почты) или проверьте ваш Email.');
-        setIsLoginMode(true);
+      } else if (isLoginMode) {
+        const { error } = await signIn(formData.identifier, formData.password);
+        if (error) {
+          if (error.message.includes('Email not confirmed')) {
+            setAuthError('Email не подтвержден. Введите код из письма ниже.');
+            setIsOtpMode(true);
+          } else {
+            setAuthError('Неверный email или пароль');
+          }
+        }
+      } else {
+        const { error } = await signUp(formData.email, formData.password, formData.name, formData.phone, formData.address);
+        if (error) {
+          setAuthError(error.message);
+        } else {
+          setIsOtpMode(true);
+          setAuthError('Мы отправили код подтверждения на ваш Email.');
+        }
       }
     } catch (err: any) {
       setAuthError('Системная ошибка: ' + err.message);
@@ -92,84 +103,91 @@ const Profile: React.FC = () => {
       <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-amber-50 mt-10 animate-in fade-in slide-in-from-bottom-4">
         <div className="text-center mb-8">
             <div className="bg-amber-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-900 shadow-inner">
-                <Smartphone size={30} />
+                {isOtpMode ? <ShieldCheck size={30} /> : <Smartphone size={30} />}
             </div>
             <h2 className="text-2xl font-black text-amber-900">
-            {isLoginMode ? 'Вход в систему' : 'Новый гость'}
+            {isOtpMode ? 'Введите код' : (isLoginMode ? 'Вход в систему' : 'Новый гость')}
             </h2>
             <p className="text-gray-400 text-xs mt-2 uppercase tracking-widest font-bold">Чайхана Жулебино</p>
         </div>
 
         {authError && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 text-red-600 text-xs font-bold animate-shake">
+          <div className={`mb-6 p-4 rounded-2xl flex gap-3 text-xs font-bold animate-shake ${isOtpMode && !authError.includes('Неверный') ? 'bg-amber-50 border border-amber-100 text-amber-800' : 'bg-red-50 border border-red-100 text-red-600'}`}>
             <AlertCircle size={18} className="shrink-0" />
             <p>{authError}</p>
           </div>
         )}
 
         <form onSubmit={handleAuth} className="space-y-4">
-          {isLoginMode ? (
-            <div className="space-y-4">
+          {isOtpMode ? (
+            <div className="space-y-6">
               <div className="relative">
                 <input 
                   type="text" 
-                  placeholder="Email" 
-                  className="w-full p-4 pl-12 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none transition" 
-                  value={formData.identifier} 
-                  onChange={e => setFormData({...formData, identifier: e.target.value})} 
+                  placeholder="6-значный код" 
+                  maxLength={6}
+                  className="w-full p-5 bg-gray-50 border-2 border-amber-100 rounded-2xl focus:border-amber-500 outline-none text-center text-2xl font-black tracking-[0.5em] transition" 
+                  value={formData.otpCode} 
+                  onChange={e => setFormData({...formData, otpCode: e.target.value.replace(/\D/g, '')})} 
                   required 
                 />
-                <Mail className="absolute left-4 top-4 text-gray-400" size={20} />
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              <input 
-                type="text" 
-                placeholder="Ваше имя" 
-                className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none" 
-                value={formData.name} 
-                onChange={e => setFormData({...formData, name: e.target.value})} 
-                required 
-              />
-              <input 
-                type="email" 
-                placeholder="Email" 
-                className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none" 
-                value={formData.email} 
-                onChange={e => setFormData({...formData, email: e.target.value})} 
-                required 
-              />
-              <input 
-                type="tel" 
-                placeholder="Номер телефона" 
-                className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none" 
-                value={formData.phone} 
-                onChange={e => setFormData({...formData, phone: e.target.value})} 
-                required 
-              />
-            </div>
-          )}
-          
-          <div className="relative">
-            <input 
-              type="password" 
-              placeholder="Пароль" 
-              className="w-full p-4 pl-12 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none transition" 
-              value={formData.password} 
-              onChange={e => setFormData({...formData, password: e.target.value})} 
-              required 
-            />
-            <Lock className="absolute left-4 top-4 text-gray-400" size={20} />
-          </div>
-
-          {!isLoginMode && (
-            <textarea 
-              placeholder="Адрес доставки (для быстрых заказов)" 
-              className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none h-24" 
-              value={formData.address} 
-              onChange={e => setFormData({...formData, address: e.target.value})} 
-            />
+            <>
+              {isLoginMode ? (
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    placeholder="Email" 
+                    className="w-full p-4 pl-12 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none transition" 
+                    value={formData.identifier} 
+                    onChange={e => setFormData({...formData, identifier: e.target.value})} 
+                    required 
+                  />
+                  <Mail className="absolute left-4 top-4 text-gray-400" size={20} />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <input 
+                    type="text" 
+                    placeholder="Ваше имя" 
+                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none" 
+                    value={formData.name} 
+                    onChange={e => setFormData({...formData, name: e.target.value})} 
+                    required 
+                  />
+                  <input 
+                    type="email" 
+                    placeholder="Email" 
+                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none" 
+                    value={formData.email} 
+                    onChange={e => setFormData({...formData, email: e.target.value})} 
+                    required 
+                  />
+                  <input 
+                    type="tel" 
+                    placeholder="Номер телефона" 
+                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none" 
+                    value={formData.phone} 
+                    onChange={e => setFormData({...formData, phone: e.target.value})} 
+                    required 
+                  />
+                </>
+              )}
+              
+              <div className="relative">
+                <input 
+                  type="password" 
+                  placeholder="Пароль" 
+                  className="w-full p-4 pl-12 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-amber-500 outline-none transition" 
+                  value={formData.password} 
+                  onChange={e => setFormData({...formData, password: e.target.value})} 
+                  required 
+                />
+                <Lock className="absolute left-4 top-4 text-gray-400" size={20} />
+              </div>
+            </>
           )}
 
           <button 
@@ -178,17 +196,28 @@ const Profile: React.FC = () => {
             className="w-full bg-amber-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-amber-800 transition shadow-lg transform active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
           >
             {isAuthProcessing && <Loader2 className="animate-spin" size={20} />}
-            {isLoginMode ? 'Войти' : 'Создать аккаунт'}
+            {isOtpMode ? 'Подтвердить' : (isLoginMode ? 'Войти' : 'Создать аккаунт')}
           </button>
         </form>
         
-        <button 
-          onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(null); }} 
-          disabled={isAuthProcessing}
-          className="w-full text-center mt-6 text-amber-800 text-sm font-black hover:underline uppercase tracking-tighter"
-        >
-          {isLoginMode ? 'Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
-        </button>
+        <div className="mt-6 flex flex-col gap-3">
+          {isOtpMode ? (
+            <button 
+              onClick={() => { setIsOtpMode(false); setAuthError(null); }} 
+              className="w-full text-center text-gray-400 text-xs font-black hover:text-amber-900 uppercase tracking-tighter flex items-center justify-center gap-2"
+            >
+              <ArrowLeft size={14} /> Назад
+            </button>
+          ) : (
+            <button 
+              onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(null); }} 
+              disabled={isAuthProcessing}
+              className="w-full text-center text-amber-800 text-sm font-black hover:underline uppercase tracking-tighter"
+            >
+              {isLoginMode ? 'Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -205,9 +234,6 @@ const Profile: React.FC = () => {
             <span className="flex items-center gap-2 bg-amber-50 text-amber-800 px-4 py-1.5 rounded-full text-xs font-black">
               <Phone size={14} /> {user.phone}
             </span>
-            <span className="flex items-center gap-2 bg-orange-50 text-orange-800 px-4 py-1.5 rounded-full text-xs font-black">
-              <MapPin size={14} /> {user.address || 'Адрес не указан'}
-            </span>
           </div>
         </div>
         <button 
@@ -216,61 +242,6 @@ const Profile: React.FC = () => {
         >
           <LogOut size={20} /> Выход
         </button>
-      </div>
-
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="bg-amber-900 p-2 rounded-xl text-white">
-            <Package size={24} />
-          </div>
-          <h3 className="text-2xl font-black text-amber-950">История заказов</h3>
-        </div>
-        
-        {isLoadingOrders ? (
-          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-amber-900" size={32} /></div>
-        ) : orders.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-amber-100">
-            <p className="text-gray-400 font-bold">У вас пока нет активных заказов</p>
-            <a href="/" className="inline-block mt-4 text-amber-800 font-black uppercase text-xs tracking-widest hover:underline">К выбору блюд</a>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {orders.map(order => (
-              <div key={order.id} className="bg-white p-6 rounded-3xl border border-amber-50 shadow-sm hover:shadow-md transition">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h4 className="text-xl font-black text-amber-950">Заказ #{order.id}</h4>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
-                      {new Date(order.created_at).toLocaleString('ru-RU')}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-black text-amber-900">{order.total_amount} ₽</div>
-                    <div className={`inline-block mt-2 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-                      order.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                      order.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                      'bg-blue-100 text-blue-700'
-                    }`}>
-                      {order.status === 'pending' ? 'Ожидание' : 
-                       order.status === 'cooking' ? 'Готовится' :
-                       order.status === 'delivering' ? 'В пути' :
-                       order.status === 'delivered' ? 'Выполнен' : order.status}
-                    </div>
-                  </div>
-                </div>
-                <div className="border-t border-amber-50 pt-4 mt-4">
-                   <div className="flex flex-wrap gap-2">
-                     {order.items.map((item: any, idx: number) => (
-                       <div key={idx} className="bg-gray-50 px-3 py-1.5 rounded-xl text-[11px] font-bold text-gray-600 border border-gray-100">
-                         {item.dish.name} <span className="text-amber-700 font-black ml-1">×{item.quantity}</span>
-                       </div>
-                     ))}
-                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
