@@ -4,6 +4,15 @@ import { useAuth } from '../contexts/AuthContext.tsx';
 import { api } from '../apiClient.ts';
 import { User as UserIcon, Package, Loader2, Clock, ShieldCheck, LogIn, UserPlus } from 'lucide-react';
 
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Новый',
+  confirmed: 'Принят',
+  cooking: 'Готовится',
+  delivering: 'В пути',
+  delivered: 'Доставлен',
+  cancelled: 'Отменен',
+};
+
 const Profile: React.FC = () => {
   const { user, signIn, signUp, signOut, isLoading } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
@@ -167,12 +176,10 @@ const Profile: React.FC = () => {
                   </p>
                 </div>
                 <span className={`px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest ${
-                  order.status === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'
+                  order.status === 'delivered' ? 'bg-green-100 text-green-700' : 
+                  order.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
                 }`}>
-                  {order.status === 'pending' ? 'Новый' : 
-                   order.status === 'cooking' ? 'Готовится' : 
-                   order.status === 'delivering' ? 'В пути' : 
-                   order.status === 'delivered' ? 'Доставлен' : order.status}
+                  {STATUS_LABELS[order.status] || order.status}
                 </span>
               </div>
             ))}

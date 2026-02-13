@@ -125,7 +125,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <Link to="/privacy" className="hover:text-white transition">Приватность</Link>
             <Link to="/contacts" className="hover:text-white transition">Контакты</Link>
           </div>
-          <p className="text-[10px] text-gray-500 uppercase tracking-widest">© 2024 Чайхана Жулебино. Все права защищены.</p>
+          <div className="space-y-1 mb-6">
+            <p className="text-[10px] text-gray-500 uppercase tracking-widest">© 2025 Чайхана Жулебино. Все права защищены.</p>
+            <p className="text-[9px] text-gray-500/60 font-medium tracking-wider">
+              ИНН 7707083893 | ОГРНИП 325508100324129
+            </p>
+          </div>
+          <p className="text-[10px] text-gray-600 uppercase tracking-widest">Работаем с душой. Готовим с любовью.</p>
         </div>
       </footer>
     </div>

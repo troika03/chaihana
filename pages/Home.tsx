@@ -16,6 +16,14 @@ const CATEGORIES = [
   { id: 'desserts', label: 'Десерты' },
 ];
 
+const CATEGORY_LABELS: Record<string, string> = {
+  main: 'Основные',
+  soups: 'Супы',
+  salads: 'Салаты',
+  drinks: 'Напитки',
+  desserts: 'Десерты',
+};
+
 const Home: React.FC = () => {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,7 +51,6 @@ const Home: React.FC = () => {
   useEffect(() => {
     loadDishes();
 
-    // Настройка Realtime для синхронизации стоп-листа
     const channel = supabase
       .channel('public:dishes')
       .on(
@@ -148,7 +155,9 @@ const Home: React.FC = () => {
               <h3 className={`font-black text-2xl mb-3 transition-colors ${dish.available ? 'text-amber-950 group-hover:text-orange-600' : 'text-amber-900/40'}`}>{dish.name}</h3>
               <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest line-clamp-2 h-8 mb-8">{dish.description}</p>
               <div className="flex items-center justify-between">
-                <span className={`text-[9px] font-black uppercase px-4 py-2 rounded-xl ${dish.available ? 'text-orange-500 bg-orange-50' : 'text-gray-400 bg-gray-100'}`}>{dish.category}</span>
+                <span className={`text-[9px] font-black uppercase px-4 py-2 rounded-xl ${dish.available ? 'text-orange-500 bg-orange-50' : 'text-gray-400 bg-gray-100'}`}>
+                  {CATEGORY_LABELS[dish.category] || dish.category}
+                </span>
                 {dish.available && (
                   <div className="w-12 h-12 bg-amber-950 text-white rounded-[1.2rem] flex items-center justify-center group-hover:bg-orange-500 transition-all duration-500 group-hover:rotate-90"><Plus size={24} /></div>
                 )}
