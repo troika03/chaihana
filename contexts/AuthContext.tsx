@@ -35,14 +35,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (!error && data) {
         setUser(data as UserProfile);
-      } else if (error) {
-        console.error('Profile fetch error:', error.message);
       } else {
-        // Если запись еще не создана триггером (бывает задержка в миллисекунды)
-        setUser({ id: uid, full_name: 'Гость', phone: '', address: '', role: 'user' });
+        if (error) {
+          console.error('Auth Profile Fetch Error (Recursion or RLS):', error.message);
+        }
+        // В случае любой ошибки БД (включая рекурсию), устанавливаем гостевой профиль,
+        // чтобы приложение не блокировалось на стадии загрузки.
+        setUser({ 
+          id: uid, 
+          full_name: 'Гость', 
+          phone: '', 
+          address: '', 
+          role: 'user' 
+        });
       }
     } catch (err) {
-      console.error('Critical error in fetchProfile:', err);
+      console.error('Critical Auth Context Error:', err);
     } finally {
       isFetchingProfile.current = false;
       setIsLoading(false);
@@ -54,7 +62,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
         if (isMounted) {
           if (session?.user) {
             await fetchProfile(session.user.id);
@@ -62,8 +72,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setIsLoading(false);
           }
         }
-      } catch (e) {
-        console.error("Auth init error", e);
+      } catch (e: any) {
+        console.error("Auth Init Failed:", e);
+        // Если ошибка инициализации (например, упал запрос к профилю из-за RLS)
         if (isMounted) setIsLoading(false);
       }
     };
@@ -71,13 +82,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (isMounted) {
-        if (session?.user) {
-          await fetchProfile(session.user.id);
-        } else {
-          setUser(null);
-          setIsLoading(false);
-        }
+      if (!isMounted) return;
+
+      if (session?.user) {
+        await fetchProfile(session.user.id);
+      } else {
+        setUser(null);
+        setIsLoading(false);
       }
     });
 

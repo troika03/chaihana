@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { supabase } from '../supabaseClient.ts';
-import { LogOut, User as UserIcon, Package, Loader2, Smartphone, ShieldCheck, ArrowLeft, Clock, MapPin, CheckCircle, Smartphone as OtpIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, Package, Loader2, Smartphone, ShieldCheck, ArrowLeft, Clock, MapPin, CheckCircle, Smartphone as OtpIcon, Mail } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 const Profile: React.FC = () => {
@@ -104,7 +104,7 @@ const Profile: React.FC = () => {
       <div className="max-w-md mx-auto bg-white p-10 rounded-[3rem] shadow-2xl border border-amber-50 mt-10 animate-in fade-in slide-in-from-bottom-8">
         <div className="text-center mb-10">
             <h2 className="text-3xl font-black text-amber-950 italic tracking-tighter">
-            {isOtpMode ? 'Код из письма' : (isLoginMode ? 'С возвращением!' : 'Стать гостем')}
+            {isOtpMode ? 'Почти готово!' : (isLoginMode ? 'С возвращением!' : 'Стать гостем')}
             </h2>
             <div className="w-12 h-1 bg-orange-500 mx-auto rounded-full mt-3 mb-2"></div>
             <p className="text-gray-400 text-[10px] uppercase tracking-[0.3em] font-black">Чайхана Жулебино</p>
@@ -142,10 +142,20 @@ const Profile: React.FC = () => {
           {isOtpMode && (
             <div className="space-y-6">
               <div className="flex justify-center">
-                <OtpIcon size={48} className="text-amber-900/20" />
+                <div className="bg-amber-100/50 p-6 rounded-full animate-pulse">
+                  <Mail size={40} className="text-amber-900" />
+                </div>
               </div>
-              <input type="text" placeholder="000000" className="w-full p-5 bg-amber-100/50 rounded-[2rem] outline-none text-center text-4xl font-black tracking-[0.5em] text-amber-950" value={formData.otpCode} onChange={e => setFormData({...formData, otpCode: e.target.value})} maxLength={6} required />
-              <p className="text-[10px] text-center text-gray-400 font-bold uppercase tracking-widest">Введите код из письма для подтверждения</p>
+              <p className="text-[11px] text-center text-amber-900 font-bold leading-relaxed px-4">
+                Мы отправили секретный код на вашу почту. Пожалуйста, введите его ниже для активации профиля.
+              </p>
+              <input type="text" placeholder="000000" className="w-full p-5 bg-amber-50 rounded-[2rem] border-2 border-amber-100 outline-none text-center text-4xl font-black tracking-[0.5em] text-amber-950 focus:border-orange-500 transition-colors" value={formData.otpCode} onChange={e => setFormData({...formData, otpCode: e.target.value})} maxLength={6} required />
+              
+              {resendTimer > 0 ? (
+                <p className="text-[9px] text-center text-gray-400 font-black uppercase tracking-widest">Отправить повторно через {resendTimer} сек</p>
+              ) : (
+                <button type="button" onClick={() => { resendOTP(isLoginMode ? formData.identifier : formData.email); setResendTimer(60); }} className="w-full text-[9px] text-center text-amber-900 font-black uppercase tracking-widest hover:text-orange-600 transition">Отправить код еще раз</button>
+              )}
             </div>
           )}
 

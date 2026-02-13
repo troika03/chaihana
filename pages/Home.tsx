@@ -1,10 +1,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Loader2, UtensilsCrossed, RefreshCw, Coffee, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Loader2, UtensilsCrossed, RefreshCw, AlertTriangle, Terminal, Copy, Check, ShieldAlert } from 'lucide-react';
 import { supabase } from '../supabaseClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
-import { useAuth } from '../contexts/AuthContext.tsx';
 import Modal from '../components/ui/Modal.tsx';
 
 const CATEGORIES = [
@@ -24,9 +23,9 @@ const Home: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [copied, setCopied] = useState(false);
   
   const { addToCart } = useCart();
-  const { user } = useAuth();
 
   const fetchDishes = useCallback(async () => {
     setIsLoading(true);
@@ -38,11 +37,19 @@ const Home: React.FC = () => {
         .select('*')
         .order('name', { ascending: true });
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error("Supabase Error:", dbError);
+        throw new Error(dbError.message);
+      }
+      
       setDishes(data || []);
     } catch (e: any) {
       console.error("Fetch error:", e);
-      setError("Не удалось загрузить меню. Проверьте соединение или обновите страницу.");
+      if (e.message?.includes('recursion')) {
+        setError("RLS_RECURSION");
+      } else {
+        setError("Не удалось загрузить меню. Проверьте соединение с БД.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -51,6 +58,26 @@ const Home: React.FC = () => {
   useEffect(() => {
     fetchDishes();
   }, [fetchDishes]);
+
+  const copySql = () => {
+    const sql = `-- ПОЛНОЕ ИСПРАВЛЕНИЕ ПОЛИТИК (SQL)
+CREATE OR REPLACE FUNCTION public.check_is_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN (SELECT role = 'admin' FROM public.profiles WHERE id = auth.uid());
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Profiles select policy" ON public.profiles;
+CREATE POLICY "Profiles select policy" ON public.profiles FOR SELECT USING (auth.uid() = id OR public.check_is_admin());
+DROP POLICY IF EXISTS "Profiles update policy" ON public.profiles;
+CREATE POLICY "Profiles update policy" ON public.profiles FOR UPDATE USING (auth.uid() = id OR public.check_is_admin());`;
+
+    navigator.clipboard.writeText(sql);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const filteredDishes = dishes.filter(dish => {
     const matchesCategory = activeCategory === 'all' || dish.category === activeCategory;
@@ -75,6 +102,61 @@ const Home: React.FC = () => {
       <div className="flex flex-col items-center justify-center py-40 gap-6">
         <Loader2 className="animate-spin text-amber-900" size={64} />
         <p className="text-amber-950 font-black uppercase tracking-[0.2em] text-[10px]">Загружаем меню Чайханы...</p>
+      </div>
+    );
+  }
+
+  if (error === "RLS_RECURSION") {
+    return (
+      <div className="max-w-3xl mx-auto py-12 px-6 animate-in fade-in slide-in-from-bottom-4">
+        <div className="bg-white rounded-[3rem] p-10 shadow-2xl border border-red-100 space-y-8">
+          <div className="flex items-center gap-5 text-red-600">
+            <div className="p-4 bg-red-50 rounded-3xl">
+              <ShieldAlert size={48} />
+            </div>
+            <div>
+              <h2 className="text-3xl font-black italic tracking-tighter text-amber-950 leading-none">Ошибка политик</h2>
+              <p className="text-xs font-bold text-red-500 uppercase tracking-widest mt-2">Infinite Recursion in Profiles</p>
+            </div>
+          </div>
+
+          <div className="bg-amber-50 rounded-[2rem] p-8 space-y-4 border border-amber-100/50">
+            <h4 className="font-black text-amber-950 uppercase text-xs tracking-widest flex items-center gap-2">
+              <Terminal size={16} /> Исправление:
+            </h4>
+            <p className="text-sm text-amber-900/70 font-medium leading-relaxed">
+              Ваши политики RLS ссылаются сами на себя. Чтобы это исправить, выполните этот код в <b>Supabase SQL Editor</b>:
+            </p>
+
+            <div className="relative group mt-6">
+              <pre className="bg-amber-950 text-orange-200/80 p-6 rounded-2xl text-[10px] overflow-x-auto font-mono leading-relaxed shadow-inner">
+{`CREATE OR REPLACE FUNCTION check_is_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN (SELECT role = 'admin' FROM profiles WHERE id = auth.uid());
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP POLICY IF EXISTS "Profiles select policy" ON profiles;
+CREATE POLICY "Profiles select policy" ON profiles 
+FOR SELECT USING (auth.uid() = id OR check_is_admin());`}
+              </pre>
+              <button 
+                onClick={copySql}
+                className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 p-3 rounded-xl transition-all text-white backdrop-blur-md"
+              >
+                {copied ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
+              </button>
+            </div>
+          </div>
+
+          <button 
+            onClick={() => fetchDishes()}
+            className="w-full flex items-center justify-center gap-3 bg-amber-950 text-white py-5 rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-amber-800 transition shadow-xl shadow-amber-950/20"
+          >
+            <RefreshCw size={18} /> Обновить страницу
+          </button>
+        </div>
       </div>
     );
   }
@@ -119,15 +201,16 @@ const Home: React.FC = () => {
       {error ? (
         <div className="text-center py-20 bg-white rounded-[3rem] border border-red-100 p-8 max-w-md mx-auto shadow-sm">
           <AlertTriangle className="mx-auto text-red-500 mb-4" size={32} />
-          <p className="text-red-500 font-bold mb-6 text-sm">{error}</p>
-          <button onClick={() => fetchDishes()} className="flex items-center gap-2 mx-auto bg-amber-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-800 transition">
+          <h4 className="font-black text-amber-950 uppercase text-xs mb-2">Проблема с загрузкой</h4>
+          <p className="text-red-500 font-bold mb-6 text-[11px] leading-relaxed">{error}</p>
+          <button onClick={() => fetchDishes()} className="flex items-center gap-2 mx-auto bg-amber-950 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-800 transition">
             <RefreshCw size={16} /> Попробовать снова
           </button>
         </div>
       ) : filteredDishes.length === 0 ? (
         <div className="text-center py-40">
           <UtensilsCrossed size={64} className="mx-auto text-amber-900/5 mb-6" />
-          <p className="text-2xl font-black text-amber-950/20 uppercase tracking-[0.2em]">Ничего не найдено</p>
+          <p className="text-2xl font-black text-amber-950/20 uppercase tracking-[0.2em]">Меню пока пусто</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">

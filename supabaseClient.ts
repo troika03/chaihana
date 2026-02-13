@@ -1,8 +1,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://lxxamuyljbchxbjavjiv.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4eGFtdXlsamJjaHhiamF2aml2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4Njc0MjksImV4cCI6MjA4NjQ0MzQyOX0.O2wim-OgWZSm1dikf0JL-RwpEUl6_W4Ff-Q8nZYCJy8'; 
+const supabaseUrl = 'https://gnrvpbfdofktkmcirwqq.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImducnZwYmZkb2ZrdGttY2lyd3FxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5NDk2MjYsImV4cCI6MjA4NjUyNTYyNn0.jKWiY2xVPZDx83LKT6FHelwiix2BVF3K5VN4Ef1kUaM'; 
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
@@ -12,13 +12,6 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     flowType: 'pkce'
   },
   global: {
-    headers: { 'x-application-name': 'zhulebino-chaikhana' },
-    // Включаем таймаут для всех запросов
-    fetch: (url, options) => {
-      return fetch(url, {
-        ...options,
-        // Стандартный таймаут fetch не поддерживает, но мы контролируем это в компонентах через AbortController
-      });
-    }
+    headers: { 'x-application-name': 'zhulebino-chaikhana' }
   }
 });

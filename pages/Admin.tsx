@@ -7,7 +7,7 @@ import {
   Package, Utensils, TrendingUp, 
   CheckCircle2, Clock, Truck, 
   XCircle, Filter, Search, Save, Calendar, Archive, Eye, ToggleLeft, ToggleRight,
-  Volume2, VolumeX, BellRing, CreditCard, AlertCircle
+  Volume2, VolumeX, BellRing, CreditCard, AlertCircle, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from '../components/ui/Modal';
@@ -17,11 +17,12 @@ type TimeRange = 'day' | 'week' | 'month' | 'all' | 'custom';
 const NOTIFICATION_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
 const Admin: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const [activeTab, setActiveTab] = useState<'stats' | 'orders' | 'menu'>('stats');
   const [orders, setOrders] = useState<Order[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
   const [showArchive, setShowArchive] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -57,15 +58,25 @@ const Admin: React.FC = () => {
 
   const loadData = async () => {
     setIsLoading(true);
+    setDbError(null);
     try {
       const [ordersRes, dishesRes] = await Promise.all([
         supabase.from('orders').select('*').order('created_at', { ascending: false }),
         supabase.from('dishes').select('*').order('name', { ascending: true })
       ]);
+      
+      if (ordersRes.error) throw ordersRes.error;
+      if (dishesRes.error) throw dishesRes.error;
+
       if (ordersRes.data) setOrders(ordersRes.data);
       if (dishesRes.data) setDishes(dishesRes.data);
     } catch (err: any) {
       console.error(err);
+      if (err.message?.includes('recursion')) {
+        setDbError("Ошибка рекурсии политик RLS. Пожалуйста, примените SQL Fix на главной странице.");
+      } else {
+        setDbError(err.message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +91,6 @@ const Admin: React.FC = () => {
 
   const stats = useMemo(() => {
     const now = new Date();
-    // Считаем только оплаченные и доставленные заказы для выручки
     let filtered = orders.filter(o => o.payment_status === 'succeeded' && o.status !== 'cancelled');
 
     if (timeRange !== 'all') {
@@ -150,35 +160,25 @@ const Admin: React.FC = () => {
     }
   };
 
-  const handleDeleteDish = async (id: number) => {
-    if (!window.confirm('Удалить это блюдо?')) return;
-    try {
-      const { error } = await supabase.from('dishes').delete().eq('id', id);
-      if (error) throw error;
-      setDishes(dishes.filter(d => d.id !== id));
-    } catch (err: any) {
-      alert('Ошибка удаления: ' + err.message);
-    }
-  };
-
-  const toggleDishAvailability = async (dish: Dish) => {
-    try {
-      const { error } = await supabase.from('dishes').update({ available: !dish.available }).eq('id', dish.id);
-      if (error) throw error;
-      setDishes(dishes.map(d => d.id === dish.id ? { ...d, available: !d.available } : d));
-    } catch (err: any) {
-      console.error(err);
-    }
-  };
-
-  if (!isAdmin) return <div className="text-center py-20 font-black text-amber-950 uppercase tracking-widest">Доступ запрещен</div>;
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 gap-6 text-center px-4">
+        <ShieldAlert size={64} className="text-amber-900/10" />
+        <div>
+          <h2 className="text-3xl font-black text-amber-950 italic tracking-tighter uppercase">Доступ ограничен</h2>
+          <p className="text-amber-900/40 text-[10px] font-black uppercase tracking-[0.2em] mt-2">Вы не являетесь администратором</p>
+        </div>
+        <button onClick={() => window.location.href = '#/'} className="mt-4 bg-amber-950 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-800 transition">Вернуться в меню</button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-black text-amber-950 uppercase italic tracking-tighter">Чайхана Жулебино: Админ</h1>
-          <p className="text-amber-800/60 font-bold text-xs uppercase tracking-widest">Панель управления заказами и ЮKassa</p>
+          <p className="text-amber-800/60 font-bold text-xs uppercase tracking-widest">Управление заказами и аналитика</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -202,6 +202,13 @@ const Admin: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {dbError && (
+        <div className="bg-red-50 border border-red-100 p-6 rounded-[2rem] flex items-center gap-4 text-red-600 animate-in slide-in-from-top-4">
+          <AlertCircle size={24} />
+          <p className="text-xs font-black uppercase tracking-widest">{dbError}</p>
+        </div>
+      )}
 
       {activeTab === 'stats' && (
         <div className="space-y-8">
@@ -271,55 +278,55 @@ const Admin: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-amber-50">
-                {filteredOrders.map(order => (
-                  <tr key={order.id} className="hover:bg-amber-50/10 transition">
-                    <td className="p-6">
-                      <div className="font-black text-amber-950 text-sm flex items-center gap-2">
-                        #{order.id.toString().slice(-4)}
-                        {order.status === 'pending' && <BellRing size={12} className="text-orange-500 animate-bounce" />}
-                      </div>
-                      <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-1">
-                        {new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <div className="flex items-center gap-3">
-                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                          order.payment_status === 'succeeded' ? 'bg-green-50 text-green-700 border-green-200' :
-                          order.payment_status === 'failed' ? 'bg-red-50 text-red-700 border-red-200' :
-                          'bg-amber-50 text-amber-600 border-amber-200'
-                        }`}>
-                          <CreditCard size={10} />
-                          {order.payment_status === 'succeeded' ? 'Оплачено' : 
-                           order.payment_status === 'failed' ? 'Ошибка' : 'Ожидание'}
-                        </div>
-                        {order.payment_status === 'pending' && (
-                            <button 
-                                onClick={() => updatePaymentStatus(order.id, 'succeeded')}
-                                className="text-[8px] font-black uppercase text-amber-900/20 hover:text-amber-900 transition underline underline-offset-4"
-                            >
-                                Подтвердить вручную
-                            </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-6 font-black text-amber-950 text-base">{order.total_amount} ₽</td>
-                    <td className="p-6">
-                      <select 
-                        value={order.status}
-                        onChange={(e) => updateOrderStatus(order.id, e.target.value as any)}
-                        className={`text-[10px] font-black uppercase px-4 py-2 rounded-xl outline-none border-2 transition-all cursor-pointer ${getStatusColor(order.status)}`}
-                      >
-                        <option value="pending">Новый</option>
-                        <option value="confirmed">Принят</option>
-                        <option value="cooking">Готовится</option>
-                        <option value="delivering">В пути</option>
-                        <option value="delivered">Завершен</option>
-                        <option value="cancelled">Отмена</option>
-                      </select>
+                {filteredOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-20 text-center font-black text-amber-950/20 uppercase tracking-widest text-xs">
+                      Заказов не обнаружено
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredOrders.map(order => (
+                    <tr key={order.id} className="hover:bg-amber-50/10 transition">
+                      <td className="p-6">
+                        <div className="font-black text-amber-950 text-sm flex items-center gap-2">
+                          #{order.id.toString().slice(-4)}
+                          {order.status === 'pending' && <BellRing size={12} className="text-orange-500 animate-bounce" />}
+                        </div>
+                        <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-1">
+                          {new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </div>
+                      </td>
+                      <td className="p-6">
+                        <div className="flex items-center gap-3">
+                          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                            order.payment_status === 'succeeded' ? 'bg-green-50 text-green-700 border-green-200' :
+                            order.payment_status === 'failed' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'bg-amber-50 text-amber-600 border-amber-200'
+                          }`}>
+                            <CreditCard size={10} />
+                            {order.payment_status === 'succeeded' ? 'Оплачено' : 
+                             order.payment_status === 'failed' ? 'Ошибка' : 'Ожидание'}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-6 font-black text-amber-950 text-base">{order.total_amount} ₽</td>
+                      <td className="p-6">
+                        <select 
+                          value={order.status}
+                          onChange={(e) => updateOrderStatus(order.id, e.target.value as any)}
+                          className={`text-[10px] font-black uppercase px-4 py-2 rounded-xl outline-none border-2 transition-all cursor-pointer ${getStatusColor(order.status)}`}
+                        >
+                          <option value="pending">Новый</option>
+                          <option value="confirmed">Принят</option>
+                          <option value="cooking">Готовится</option>
+                          <option value="delivering">В пути</option>
+                          <option value="delivered">Завершен</option>
+                          <option value="cancelled">Отмена</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -328,14 +335,15 @@ const Admin: React.FC = () => {
 
       {activeTab === 'menu' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Меню без изменений */}
             {dishes.map(dish => (
                <div key={dish.id} className="bg-white rounded-[2.5rem] border border-amber-50 p-4">
                    <div className="h-40 rounded-2xl overflow-hidden mb-4"><img src={dish.image} className="w-full h-full object-cover" /></div>
                    <h4 className="font-black text-amber-950 uppercase text-xs mb-2 truncate">{dish.name}</h4>
                    <div className="flex justify-between items-center">
                        <span className="font-black text-amber-900">{dish.price} ₽</span>
-                       <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="p-2 bg-amber-50 rounded-xl text-amber-900"><Edit2 size={14}/></button>
+                       <div className="flex gap-2">
+                          <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="p-2 bg-amber-50 rounded-xl text-amber-900"><Edit2 size={14}/></button>
+                       </div>
                    </div>
                </div>
             ))}
