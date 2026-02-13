@@ -37,9 +37,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(data as UserProfile);
       } else if (error) {
         console.error('Profile fetch error:', error.message);
+      } else {
+        // Если данных нет, возможно триггер еще не отработал. 
+        // Создаем временный объект, чтобы не блокировать UI
+        setUser({ id: uid, full_name: 'Загрузка...', phone: '', address: '', role: 'user' });
       }
     } catch (err) {
-      console.error('Error in fetchProfile:', err);
+      console.error('Critical error in fetchProfile:', err);
     } finally {
       isFetchingProfile.current = false;
       setIsLoading(false);
@@ -70,7 +74,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (isMounted) {
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'USER_UPDATED') {
+            await fetchProfile(session.user.id);
+          }
         } else {
           setUser(null);
           setIsLoading(false);
@@ -85,13 +91,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const signIn = async (identifier: string, password: string) => {
-    return await supabase.auth.signInWithPassword({ 
-      email: identifier, 
-      password 
-    });
+    setIsLoading(true);
+    return await supabase.auth.signInWithPassword({ email: identifier, password });
   };
 
   const signInWithGoogle = async () => {
+    setIsLoading(true);
     return await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin }
@@ -103,25 +108,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { data, error: authError } = await supabase.auth.signUp({ 
         email, 
         password,
-        options: { 
-          data: { 
-            full_name: fullName,
-            phone: phone
-          } 
-        }
+        options: { data: { full_name: fullName, phone } }
       });
-
       if (authError) return { error: authError };
-
-      // Профиль создается автоматически триггером в БД, 
-      // но для верности мы можем обновить адрес, если триггер его не подхватил
-      if (data.user && address) {
-        await supabase
-          .from('profiles')
-          .update({ address: address })
-          .eq('id', data.user.id);
-      }
-      
       return { error: null };
     } catch (err: any) {
       return { error: err };
