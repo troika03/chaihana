@@ -38,9 +38,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else if (error) {
         console.error('Profile fetch error:', error.message);
       } else {
-        // Если данных нет, возможно триггер еще не отработал. 
-        // Создаем временный объект, чтобы не блокировать UI
-        setUser({ id: uid, full_name: 'Загрузка...', phone: '', address: '', role: 'user' });
+        // Если запись еще не создана триггером (бывает задержка в миллисекунды)
+        setUser({ id: uid, full_name: 'Гость', phone: '', address: '', role: 'user' });
       }
     } catch (err) {
       console.error('Critical error in fetchProfile:', err);
@@ -74,9 +73,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (isMounted) {
         if (session?.user) {
-          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'USER_UPDATED') {
-            await fetchProfile(session.user.id);
-          }
+          await fetchProfile(session.user.id);
         } else {
           setUser(null);
           setIsLoading(false);
@@ -91,12 +88,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const signIn = async (identifier: string, password: string) => {
-    setIsLoading(true);
     return await supabase.auth.signInWithPassword({ email: identifier, password });
   };
 
   const signInWithGoogle = async () => {
-    setIsLoading(true);
     return await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin }
