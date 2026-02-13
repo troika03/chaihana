@@ -15,39 +15,24 @@ export interface CartItem {
 }
 
 export interface UserProfile {
-  id: string; // UUID from Supabase Auth
+  id: string;
   full_name: string;
-  phone: string;
+  phone?: string;
   address: string;
   role: 'admin' | 'user';
-}
-
-export interface Courier {
-  id: number;
-  name: string;
-  phone: string;
-  vehicle: string;
-  status: 'available' | 'busy' | 'offline';
 }
 
 export interface Order {
   id: number;
   user_id?: string;
   created_at: string;
-  items: CartItem[]; // Stored as JSONB in DB
+  items: CartItem[];
   total_amount: number;
   status: 'pending' | 'confirmed' | 'cooking' | 'delivering' | 'delivered' | 'cancelled';
   delivery_address: string;
-  contact_phone: string;
+  contact_phone?: string;
   comment?: string;
-  payment_method: 'card'; // Изменено: только карта
+  payment_method: 'card';
   payment_status: 'pending' | 'succeeded' | 'failed';
   assigned_courier_id?: number;
-  is_rated?: boolean;
-
-  // Compatibility fields for mock data
-  total?: number;
-  address?: string;
-  phone?: string;
-  date?: string;
 }

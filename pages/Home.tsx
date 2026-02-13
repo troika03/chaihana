@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Loader2, UtensilsCrossed, RefreshCw, AlertTriangle, Terminal, Copy, Check, ShieldAlert } from 'lucide-react';
-import { supabase } from '../supabaseClient.ts';
+import { Search, Plus, Loader2, Sparkles, MapPin, Clock, RefreshCw } from 'lucide-react';
+import { api } from '../apiClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
 import Modal from '../components/ui/Modal.tsx';
 
 const CATEGORIES = [
-  { id: 'all', label: 'Все' },
+  { id: 'all', label: 'Все блюда' },
   { id: 'main', label: 'Основные' },
   { id: 'soups', label: 'Супы' },
   { id: 'salads', label: 'Салаты' },
@@ -18,250 +18,121 @@ const CATEGORIES = [
 const Home: React.FC = () => {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [copied, setCopied] = useState(false);
-  
   const { addToCart } = useCart();
 
-  const fetchDishes = useCallback(async () => {
+  const loadDishes = useCallback(async () => {
     setIsLoading(true);
-    setError(null);
-    
+    setError(false);
     try {
-      const { data, error: dbError } = await supabase
-        .from('dishes')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (dbError) {
-        console.error("Supabase Error:", dbError);
-        throw new Error(dbError.message);
-      }
-      
-      setDishes(data || []);
-    } catch (e: any) {
-      console.error("Fetch error:", e);
-      if (e.message?.includes('recursion')) {
-        setError("RLS_RECURSION");
-      } else {
-        setError("Не удалось загрузить меню. Проверьте соединение с БД.");
-      }
+      const data = await api.dishes.getAll();
+      setDishes(data);
+    } catch (err) {
+      console.error("Home: Failed to load dishes", err);
+      setError(true);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchDishes();
-  }, [fetchDishes]);
+    loadDishes();
+  }, [loadDishes]);
 
-  const copySql = () => {
-    const sql = `-- ПОЛНОЕ ИСПРАВЛЕНИЕ ПОЛИТИК (SQL)
-CREATE OR REPLACE FUNCTION public.check_is_admin()
-RETURNS boolean AS $$
-BEGIN
-  RETURN (SELECT role = 'admin' FROM public.profiles WHERE id = auth.uid());
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+  const filtered = dishes.filter(d => 
+    (activeCategory === 'all' || d.category === activeCategory) &&
+    d.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Profiles select policy" ON public.profiles;
-CREATE POLICY "Profiles select policy" ON public.profiles FOR SELECT USING (auth.uid() = id OR public.check_is_admin());
-DROP POLICY IF EXISTS "Profiles update policy" ON public.profiles;
-CREATE POLICY "Profiles update policy" ON public.profiles FOR UPDATE USING (auth.uid() = id OR public.check_is_admin());`;
-
-    navigator.clipboard.writeText(sql);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const filteredDishes = dishes.filter(dish => {
-    const matchesCategory = activeCategory === 'all' || dish.category === activeCategory;
-    const matchesSearch = dish.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
-
-  const handleOpenDish = (dish: Dish) => {
-    setSelectedDish(dish);
-    setQuantity(1);
-  };
-
-  const handleAddToCart = () => {
-    if (selectedDish) {
-      addToCart(selectedDish, quantity);
-      setSelectedDish(null);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-40 gap-6">
-        <Loader2 className="animate-spin text-amber-900" size={64} />
-        <p className="text-amber-950 font-black uppercase tracking-[0.2em] text-[10px]">Загружаем меню Чайханы...</p>
-      </div>
-    );
-  }
-
-  if (error === "RLS_RECURSION") {
-    return (
-      <div className="max-w-3xl mx-auto py-12 px-6 animate-in fade-in slide-in-from-bottom-4">
-        <div className="bg-white rounded-[3rem] p-10 shadow-2xl border border-red-100 space-y-8">
-          <div className="flex items-center gap-5 text-red-600">
-            <div className="p-4 bg-red-50 rounded-3xl">
-              <ShieldAlert size={48} />
-            </div>
-            <div>
-              <h2 className="text-3xl font-black italic tracking-tighter text-amber-950 leading-none">Ошибка политик</h2>
-              <p className="text-xs font-bold text-red-500 uppercase tracking-widest mt-2">Infinite Recursion in Profiles</p>
-            </div>
-          </div>
-
-          <div className="bg-amber-50 rounded-[2rem] p-8 space-y-4 border border-amber-100/50">
-            <h4 className="font-black text-amber-950 uppercase text-xs tracking-widest flex items-center gap-2">
-              <Terminal size={16} /> Исправление:
-            </h4>
-            <p className="text-sm text-amber-900/70 font-medium leading-relaxed">
-              Ваши политики RLS ссылаются сами на себя. Чтобы это исправить, выполните этот код в <b>Supabase SQL Editor</b>:
-            </p>
-
-            <div className="relative group mt-6">
-              <pre className="bg-amber-950 text-orange-200/80 p-6 rounded-2xl text-[10px] overflow-x-auto font-mono leading-relaxed shadow-inner">
-{`CREATE OR REPLACE FUNCTION check_is_admin()
-RETURNS boolean AS $$
-BEGIN
-  RETURN (SELECT role = 'admin' FROM profiles WHERE id = auth.uid());
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP POLICY IF EXISTS "Profiles select policy" ON profiles;
-CREATE POLICY "Profiles select policy" ON profiles 
-FOR SELECT USING (auth.uid() = id OR check_is_admin());`}
-              </pre>
-              <button 
-                onClick={copySql}
-                className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 p-3 rounded-xl transition-all text-white backdrop-blur-md"
-              >
-                {copied ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <button 
-            onClick={() => fetchDishes()}
-            className="w-full flex items-center justify-center gap-3 bg-amber-950 text-white py-5 rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-amber-800 transition shadow-xl shadow-amber-950/20"
-          >
-            <RefreshCw size={18} /> Обновить страницу
-          </button>
+  if (isLoading) return (
+    <div className="flex flex-col items-center justify-center py-40 gap-6">
+      <div className="relative">
+        <Loader2 className="animate-spin text-amber-950" size={64} />
+        <div className="absolute inset-0 flex items-center justify-center">
+            <Sparkles className="text-orange-500 animate-pulse" size={24} />
         </div>
       </div>
-    );
-  }
+      <div className="text-center space-y-2">
+        <p className="text-amber-950 font-black italic tracking-tighter text-2xl">Затапливаем тандыр...</p>
+        <p className="text-amber-900/40 text-[10px] font-black uppercase tracking-[0.3em]">Пожалуйста, подождите</p>
+      </div>
+    </div>
+  );
+
+  if (error && dishes.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-40 gap-6 text-center">
+      <h2 className="text-2xl font-black text-amber-950 italic">Не удалось загрузить меню</h2>
+      <button 
+        onClick={loadDishes}
+        className="flex items-center gap-3 bg-amber-950 text-white px-10 py-5 rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-orange-600 transition-all"
+      >
+        <RefreshCw size={18} /> Попробовать снова
+      </button>
+    </div>
+  );
 
   return (
-    <div className="space-y-8 pb-12 animate-in fade-in duration-700">
-      <div className="text-center py-6">
-        <h1 className="text-4xl md:text-6xl font-black text-amber-950 mb-3 font-serif italic tracking-tighter">Чайхана Жулебино</h1>
-        <div className="w-24 h-1.5 bg-orange-500 mx-auto rounded-full mb-4 shadow-sm"></div>
-        <p className="text-amber-800/60 font-black uppercase tracking-[0.3em] text-[10px]">Традиции Востока в вашем доме</p>
+    <div className="space-y-12 pb-20 animate-in fade-in duration-1000">
+      <div className="relative rounded-[4rem] overflow-hidden bg-amber-950 text-white p-12 md:p-20 shadow-2xl">
+        <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/oriental-tiles.png')]"></div>
+        <div className="relative z-10 max-w-2xl">
+          <h1 className="text-5xl md:text-7xl font-black italic tracking-tighter mb-6 leading-none">Чайхана <br/><span className="text-orange-500">Жулебино</span></h1>
+          <p className="text-amber-100/60 text-lg md:text-xl font-medium mb-10">Традиции гостеприимства и аутентичные рецепты Востока в самом сердце вашего района.</p>
+          <div className="flex flex-wrap gap-4">
+            <div className="bg-white/5 border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-3"><Clock size={18} className="text-orange-400"/><span className="text-[10px] font-black uppercase">45 мин доставка</span></div>
+            <div className="bg-white/5 border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-3"><MapPin size={18} className="text-orange-400"/><span className="text-[10px] font-black uppercase">Жулебино • Люберцы</span></div>
+          </div>
+        </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-center sticky top-20 bg-[#f9f3e9]/90 backdrop-blur-xl p-4 z-30 rounded-[2rem] border border-white/50 shadow-xl shadow-amber-900/5">
+      <div className="flex flex-col md:flex-row gap-6 justify-between items-center sticky top-24 bg-[#f9f3e9]/80 backdrop-blur-2xl p-6 z-30 rounded-[3rem] border border-white shadow-xl">
         <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 no-scrollbar">
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className={`px-6 py-3 rounded-2xl whitespace-nowrap text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
-                activeCategory === cat.id
-                  ? 'bg-amber-900 text-white shadow-lg'
-                  : 'bg-white text-amber-900/40 hover:bg-amber-50'
-              }`}
-            >
-              {cat.label}
-            </button>
+          {CATEGORIES.map(c => (
+            <button key={c.id} onClick={() => setActiveCategory(c.id)} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeCategory === c.id ? 'bg-amber-950 text-white shadow-lg scale-105' : 'bg-white text-amber-900/40 hover:bg-amber-50'}`}>{c.label}</button>
           ))}
         </div>
-
-        <div className="relative w-full md:w-72 group">
-          <input
-            type="text"
-            placeholder="Поиск по меню..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-6 py-3.5 rounded-2xl border-none bg-white shadow-inner text-sm font-bold placeholder:text-amber-900/20 outline-none focus:ring-2 focus:ring-amber-900/10 transition"
-          />
-          <Search className="absolute left-4 top-3.5 text-amber-900/20" size={20} />
+        <div className="relative w-full md:w-80 group">
+          <input type="text" placeholder="Поиск блюд..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-14 pr-8 py-4 rounded-[2rem] bg-white text-sm font-bold border-none outline-none focus:ring-4 focus:ring-orange-500/10 transition-all"/>
+          <Search className="absolute left-5 top-4 text-amber-900/20 group-focus-within:text-orange-500 transition-colors" size={20} />
         </div>
       </div>
 
-      {error ? (
-        <div className="text-center py-20 bg-white rounded-[3rem] border border-red-100 p-8 max-w-md mx-auto shadow-sm">
-          <AlertTriangle className="mx-auto text-red-500 mb-4" size={32} />
-          <h4 className="font-black text-amber-950 uppercase text-xs mb-2">Проблема с загрузкой</h4>
-          <p className="text-red-500 font-bold mb-6 text-[11px] leading-relaxed">{error}</p>
-          <button onClick={() => fetchDishes()} className="flex items-center gap-2 mx-auto bg-amber-950 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-800 transition">
-            <RefreshCw size={16} /> Попробовать снова
-          </button>
-        </div>
-      ) : filteredDishes.length === 0 ? (
-        <div className="text-center py-40">
-          <UtensilsCrossed size={64} className="mx-auto text-amber-900/5 mb-6" />
-          <p className="text-2xl font-black text-amber-950/20 uppercase tracking-[0.2em]">Меню пока пусто</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {filteredDishes.map(dish => (
-            <div 
-              key={dish.id}
-              onClick={() => handleOpenDish(dish)}
-              className={`bg-white rounded-[3rem] overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 cursor-pointer group border border-amber-50/50 ${!dish.available ? 'opacity-50 grayscale' : ''}`}
-            >
-              <div className="h-64 overflow-hidden relative">
-                <img src={dish.image} alt={dish.name} className="w-full h-full object-cover transition duration-1000 group-hover:scale-110" />
-                <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-2xl font-black text-amber-900 shadow-xl">
-                  {dish.price} ₽
-                </div>
-              </div>
-              <div className="p-8">
-                <h3 className="font-black text-xl text-amber-950 mb-2 leading-tight group-hover:text-orange-600 transition-colors">{dish.name}</h3>
-                <p className="text-xs text-gray-400 font-medium line-clamp-2 mb-6 h-8">{dish.description}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-900/30 bg-amber-50 px-3 py-1 rounded-lg">{dish.category}</span>
-                  <div className="w-10 h-10 bg-amber-900 text-white rounded-2xl flex items-center justify-center group-hover:bg-orange-500 transition-colors">
-                    <Plus size={20} />
-                  </div>
-                </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10">
+        {filtered.map(dish => (
+          <div key={dish.id} onClick={() => setSelectedDish(dish)} className="bg-white rounded-[3.5rem] overflow-hidden shadow-sm hover:shadow-3xl transition-all duration-700 transform hover:-translate-y-4 cursor-pointer group border border-amber-50/50">
+            <div className="h-72 overflow-hidden relative">
+              <img src={dish.image} alt={dish.name} className="w-full h-full object-cover transition duration-1000 group-hover:scale-110" />
+              <div className="absolute top-6 right-6 bg-white/95 px-5 py-2 rounded-2xl font-black text-amber-950 shadow-xl">{dish.price} ₽</div>
+            </div>
+            <div className="p-10">
+              <h3 className="font-black text-2xl text-amber-950 mb-3 group-hover:text-orange-600 transition-colors">{dish.name}</h3>
+              <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest line-clamp-2 h-8 mb-8">{dish.description}</p>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase text-orange-500 bg-orange-50 px-4 py-2 rounded-xl">{dish.category}</span>
+                <div className="w-12 h-12 bg-amber-950 text-white rounded-[1.2rem] flex items-center justify-center group-hover:bg-orange-500 transition-all duration-500 group-hover:rotate-90"><Plus size={24} /></div>
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
 
       <Modal isOpen={!!selectedDish} onClose={() => setSelectedDish(null)} title={selectedDish?.name}>
         {selectedDish && (
-          <div className="space-y-8">
-            <div className="relative h-80 rounded-[2.5rem] overflow-hidden shadow-2xl">
-              <img src={selectedDish.image} alt={selectedDish.name} className="w-full h-full object-cover" />
-            </div>
-            <div className="px-2">
-              <p className="text-gray-500 text-lg leading-relaxed mb-10">{selectedDish.description}</p>
-              <div className="flex items-center justify-between gap-6 pt-2">
-                <div className="flex items-center bg-amber-50 rounded-2xl p-2 shadow-inner">
-                   <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, q-1)) }} className="w-12 h-12 flex items-center justify-center font-bold text-xl text-amber-900 hover:bg-white rounded-xl transition">-</button>
-                   <span className="w-12 text-center font-black text-amber-950 text-xl">{quantity}</span>
-                   <button onClick={(e) => { e.stopPropagation(); setQuantity(q => q+1) }} className="w-12 h-12 flex items-center justify-center font-bold text-xl text-amber-900 hover:bg-white rounded-xl transition">+</button>
+          <div className="space-y-10">
+            <img src={selectedDish.image} alt={selectedDish.name} className="w-full h-80 object-cover rounded-[3rem] shadow-2xl" />
+            <div className="px-4">
+              <p className="text-gray-500 text-xl leading-relaxed mb-12 font-medium">{selectedDish.description}</p>
+              <div className="flex flex-col sm:flex-row items-center gap-6">
+                <div className="flex items-center bg-amber-50 rounded-[2rem] p-3 shadow-inner w-full sm:w-auto justify-between">
+                   <button onClick={() => setQuantity(q => Math.max(1, q-1))} className="w-14 h-14 font-black text-2xl text-amber-900 hover:bg-white rounded-2xl transition-all">-</button>
+                   <span className="w-16 text-center font-black text-amber-950 text-2xl">{quantity}</span>
+                   <button onClick={() => setQuantity(q => q+1)} className="w-14 h-14 font-black text-2xl text-amber-900 hover:bg-white rounded-2xl transition-all">+</button>
                 </div>
-                <button 
-                  onClick={handleAddToCart}
-                  disabled={!selectedDish.available}
-                  className="flex-1 bg-amber-950 text-white py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] hover:bg-amber-800 transition shadow-xl shadow-amber-950/20 disabled:opacity-50"
-                >
-                  {selectedDish.available ? `Добавить: ${selectedDish.price * quantity} ₽` : 'Недоступно'}
-                </button>
+                <button onClick={() => { addToCart(selectedDish, quantity); setSelectedDish(null); setQuantity(1); }} className="flex-1 w-full bg-amber-950 text-white py-6 rounded-[2.5rem] font-black text-[10px] uppercase tracking-[0.3em] hover:bg-orange-600 transition-all shadow-2xl">Добавить за {selectedDish.price * quantity} ₽</button>
               </div>
             </div>
           </div>
@@ -270,5 +141,4 @@ FOR SELECT USING (auth.uid() = id OR check_is_admin());`}
     </div>
   );
 };
-
 export default Home;

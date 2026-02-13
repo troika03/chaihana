@@ -1,17 +1,15 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { api } from '../apiClient';
 import { UserProfile } from '../pages/types';
 
 interface AuthContextType {
   user: UserProfile | null;
   isLoading: boolean;
   isAdmin: boolean;
-  signIn: (identifier: string, password: string) => Promise<{ error: any }>;
-  signInWithGoogle: () => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string, phone: string, address: string) => Promise<{ error: any }>;
-  verifyOTP: (email: string, token: string) => Promise<{ error: any }>;
-  resendOTP: (email: string) => Promise<{ error: any }>;
+  signIn: (email: string, pass: string) => Promise<void>;
+  signUp: (email: string, pass: string, name: string, address: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -20,134 +18,100 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const isFetchingProfile = useRef(false);
-
-  const fetchProfile = async (uid: string) => {
-    if (isFetchingProfile.current) return;
-    isFetchingProfile.current = true;
-
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', uid)
-        .maybeSingle();
-      
-      if (!error && data) {
-        setUser(data as UserProfile);
-      } else {
-        if (error) {
-          console.error('Auth Profile Fetch Error (Recursion or RLS):', error.message);
-        }
-        // В случае любой ошибки БД (включая рекурсию), устанавливаем гостевой профиль,
-        // чтобы приложение не блокировалось на стадии загрузки.
-        setUser({ 
-          id: uid, 
-          full_name: 'Гость', 
-          phone: '', 
-          address: '', 
-          role: 'user' 
-        });
-      }
-    } catch (err) {
-      console.error('Critical Auth Context Error:', err);
-    } finally {
-      isFetchingProfile.current = false;
-      setIsLoading(false);
-    }
-  };
+  const isMounted = useRef(true);
 
   useEffect(() => {
-    let isMounted = true;
+    isMounted.current = true;
+    
+    // Предохранитель: в любом случае отключаем лоадер через 5 секунд
+    const safetyTimer = setTimeout(() => {
+      if (isMounted.current) setIsLoading(false);
+    }, 5000);
 
     const initAuth = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-
-        if (isMounted) {
-          if (session?.user) {
-            await fetchProfile(session.user.id);
-          } else {
-            setIsLoading(false);
-          }
+        const profile = await api.auth.getSession();
+        if (isMounted.current) {
+          setUser(profile);
+          setIsLoading(false);
+          clearTimeout(safetyTimer);
         }
-      } catch (e: any) {
-        console.error("Auth Init Failed:", e);
-        // Если ошибка инициализации (например, упал запрос к профилю из-за RLS)
-        if (isMounted) setIsLoading(false);
+      } catch (err) {
+        console.error("Auth init error:", err);
+        if (isMounted.current) setIsLoading(false);
       }
     };
 
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-
-      if (session?.user) {
-        await fetchProfile(session.user.id);
-      } else {
-        setUser(null);
-        setIsLoading(false);
+      if (event === 'SIGNED_OUT') {
+        if (isMounted.current) {
+          setUser(null);
+          setIsLoading(false);
+        }
+      } else if (session) {
+        try {
+          const profile = await api.auth.getSession();
+          if (isMounted.current) {
+            setUser(profile);
+            setIsLoading(false);
+          }
+        } catch {
+          if (isMounted.current) setIsLoading(false);
+        }
       }
     });
 
     return () => {
-      isMounted = false;
+      isMounted.current = false;
       subscription.unsubscribe();
+      clearTimeout(safetyTimer);
     };
   }, []);
 
-  const signIn = async (identifier: string, password: string) => {
-    return await supabase.auth.signInWithPassword({ email: identifier, password });
-  };
-
-  const signInWithGoogle = async () => {
-    return await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    });
-  };
-
-  const signUp = async (email: string, password: string, fullName: string, phone: string, address: string) => {
+  const signIn = async (email: string, pass: string) => {
+    setIsLoading(true);
     try {
-      const { data, error: authError } = await supabase.auth.signUp({ 
-        email, 
-        password,
-        options: { data: { full_name: fullName, phone } }
-      });
-      if (authError) return { error: authError };
-      return { error: null };
-    } catch (err: any) {
-      return { error: err };
+      const profile = await api.auth.signIn(email, pass);
+      if (isMounted.current) {
+        if (profile && profile.id === 'error') throw new Error(profile.full_name);
+        setUser(profile);
+      }
+    } finally {
+      if (isMounted.current) setIsLoading(false);
     }
   };
 
-  const verifyOTP = async (email: string, token: string) => {
-    return await supabase.auth.verifyOtp({ email, token, type: 'signup' });
-  };
-
-  const resendOTP = async (email: string) => {
-    return await supabase.auth.resend({ type: 'signup', email });
+  const signUp = async (email: string, pass: string, name: string, address: string) => {
+    setIsLoading(true);
+    try {
+      const profile = await api.auth.signUp(email, pass, name, address);
+      if (isMounted.current) {
+        if (profile && profile.id === 'error') throw new Error(profile.full_name);
+        setUser(profile);
+      }
+    } finally {
+      if (isMounted.current) setIsLoading(false);
+    }
   };
 
   const signOut = async () => {
-    setIsLoading(true);
-    await supabase.auth.signOut();
-    setUser(null);
-    setIsLoading(false);
+    try {
+      await api.auth.signOut();
+      if (isMounted.current) setUser(null);
+    } catch (e) {
+      console.warn("SignOut failed:", e);
+    }
   };
 
   return (
     <AuthContext.Provider value={{ 
       user, 
       isLoading, 
-      isAdmin: user?.role === 'admin', 
+      isAdmin: user?.role === 'admin',
       signIn, 
-      signInWithGoogle, 
       signUp, 
-      verifyOTP, 
-      resendOTP, 
       signOut 
     }}>
       {children}

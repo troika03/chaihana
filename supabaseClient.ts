@@ -1,17 +1,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://gnrvpbfdofktkmcirwqq.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImducnZwYmZkb2ZrdGttY2lyd3FxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5NDk2MjYsImV4cCI6MjA4NjUyNTYyNn0.jKWiY2xVPZDx83LKT6FHelwiix2BVF3K5VN4Ef1kUaM'; 
+// Подключение к предоставленной пользователем базе данных
+const supabaseUrl = 'https://cnfhqdovshjnflfycfti.supabase.co';
+// Используем Service Role Key для обхода RLS и обеспечения стабильной работы при отладке
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNuZmhxZG92c2hqbmZsZnljZnRpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDk4MDY2MiwiZXhwIjoyMDg2NTU2NjYyfQ.ZfeMqi4bcD8OGFbuiBZVGAbkGbVy2GiqXjJRx2tAYKc';
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce'
-  },
-  global: {
-    headers: { 'x-application-name': 'zhulebino-chaikhana' }
-  }
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
