@@ -2,50 +2,71 @@
 import { supabase } from '../supabaseClient';
 
 /**
- * Имитация интеграции с ЮKassa API.
- * В реальном приложении этот сервис вызывал бы бэкенд (Edge Functions), 
- * который создает платеж в ЮKassa и возвращает confirmation_url.
+ * Проверка, настроен ли проект Supabase (не является ли URL стандартным плейсхолдером)
+ */
+const isConfigured = () => {
+  try {
+    const url = (supabase as any).supabaseUrl;
+    return url && !url.includes('cnfhqdovshjnflfycfti.supabase.co') && !url.includes('YOUR_PROJECT_ID');
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Интеграция с ЮKassa через Supabase Edge Functions.
  */
 export const initiateYooKassaPayment = async (orderId: number, amount: number) => {
-  console.log(`[YooKassa] Создание платежа для заказа #${orderId} на сумму ${amount} ₽`);
+  // Демонстрационный режим, если проект не настроен полностью
+  if (!isConfigured()) {
+    console.log('[Payment] Demo Mode: Simulating payment process...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Имитируем успешный переход на страницу профиля через 2 секунды
+    // В реальном приложении здесь был бы редирект на kassa.yandex.ru
+    return { 
+      success: true, 
+      message: 'Демо-режим: платеж успешно "создан". Перенаправляем в профиль...',
+      demo: true 
+    };
+  }
 
-  return new Promise<{ success: boolean; confirmationUrl?: string; message: string }>(async (resolve) => {
-    // 1. Имитируем запрос к API ЮKassa через бэкенд
-    setTimeout(async () => {
-      // Имитируем успешное создание платежа в 95% случаев
-      const isApiHealthy = Math.random() > 0.05;
-
-      if (!isApiHealthy) {
-        resolve({ success: false, message: 'Ошибка API ЮKassa. Попробуйте позже.' });
-        return;
+  try {
+    // Вызываем Edge Function 'yookassa-pay'
+    const { data, error } = await supabase.functions.invoke('yookassa-pay', {
+      body: { 
+        orderId, 
+        amount, 
+        description: `Оплата заказа #${orderId} в Чайхана Жулебино` 
       }
+    });
 
-      // В реальном сценарии здесь была бы ссылка на страницу оплаты ЮKassa
-      const mockConfirmationUrl = `https://yookassa.ru/checkout/payments/v2/confirm?orderId=${orderId}`;
-      
-      console.log(`[YooKassa] Ссылка для оплаты сгенерирована: ${mockConfirmationUrl}`);
-      
-      // Имитируем процесс оплаты пользователем (через 2 секунды)
-      setTimeout(async () => {
-        const paymentSucceeded = Math.random() > 0.1; // 90% вероятность успешной оплаты
+    if (error) {
+      console.error('[Supabase Function Error]', error);
+      throw new Error(`Ошибка вызова функции: ${error.message || 'Unknown error'}`);
+    }
 
-        if (paymentSucceeded) {
-          await supabase
-            .from('orders')
-            .update({ payment_status: 'succeeded' })
-            .eq('id', orderId);
-          
-          resolve({ success: true, confirmationUrl: mockConfirmationUrl, message: 'Оплачено через ЮKassa' });
-        } else {
-          await supabase
-            .from('orders')
-            .update({ payment_status: 'failed' })
-            .eq('id', orderId);
-            
-          resolve({ success: false, message: 'Платеж отклонен банком или отменен пользователем.' });
-        }
-      }, 2000);
+    if (!data || !data.confirmation?.confirmation_url) {
+      console.error('[YooKassa API Error Response]', data);
+      const detail = data?.description || data?.detail || 'Не удалось получить ссылку на оплату от ЮKassa';
+      throw new Error(detail);
+    }
 
-    }, 1000);
-  });
+    // Сохраняем статус в базу данных (необязательно, если Edge Function это уже сделала)
+    await supabase
+      .from('orders')
+      .update({ payment_status: 'pending' })
+      .eq('id', orderId);
+
+    // Перенаправляем пользователя на страницу оплаты ЮKassa
+    window.location.href = data.confirmation.confirmation_url;
+
+    return { success: true, message: 'Перенаправление на оплату...' };
+  } catch (err: any) {
+    console.error('[YooKassa Integration Error]', err);
+    return { 
+      success: false, 
+      message: err.message || 'Внутренняя ошибка при создании платежа' 
+    };
+  }
 };

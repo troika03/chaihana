@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { Dish, Order, UserProfile } from './pages/types';
+import { Dish, Order, UserProfile, SupportMessage } from './pages/types';
 
 const INITIAL_DISHES: Dish[] = [
   { id: 1, name: 'Плов Чайханский', category: 'main', price: 450, image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800', description: 'Классический ферганский плов с нежной бараниной, желтой морковью и специями.', available: true },
@@ -166,6 +166,27 @@ export const api = {
     },
     updateStatus: async (id: number, status: Order['status']) => {
       await supabase.from('orders').update({ status }).eq('id', id);
+    }
+  },
+
+  support: {
+    send: async (msg: Partial<SupportMessage>) => {
+      if (!isConfigured()) {
+        console.log("Mock support message sent:", msg);
+        return { ...msg, id: Date.now(), created_at: new Date().toISOString(), status: 'new' };
+      }
+      const { data, error } = await supabase.from('support_messages').insert([msg]).select().single();
+      if (error) throw error;
+      return data;
+    },
+    getAll: async () => {
+      if (!isConfigured()) return [];
+      const { data } = await supabase.from('support_messages').select('*').order('created_at', { ascending: false });
+      return data || [];
+    },
+    updateStatus: async (id: number, status: 'new' | 'read') => {
+      if (!isConfigured()) return;
+      await supabase.from('support_messages').update({ status }).eq('id', id);
     }
   }
 };

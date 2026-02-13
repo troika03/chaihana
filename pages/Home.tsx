@@ -108,14 +108,23 @@ const Home: React.FC = () => {
 
   return (
     <div className="space-y-12 pb-20 animate-in fade-in duration-1000">
-      <div className="relative rounded-[4rem] overflow-hidden bg-amber-950 text-white p-12 md:p-20 shadow-2xl">
+      <div className="relative rounded-[4rem] overflow-hidden bg-amber-950 text-white p-12 md:p-20 shadow-2xl flex flex-col items-center text-center">
         <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/oriental-tiles.png')]"></div>
-        <div className="relative z-10 max-w-2xl">
-          <h1 className="text-5xl md:text-7xl font-black italic tracking-tighter mb-6 leading-none">Чайхана <br/><span className="text-orange-500">Жулебино</span></h1>
-          <p className="text-amber-100/60 text-lg md:text-xl font-medium mb-10">Традиции гостеприимства и аутентичные рецепты Востока в самом сердце вашего района.</p>
-          <div className="flex flex-wrap gap-4">
-            <div className="bg-white/5 border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-3"><Clock size={18} className="text-orange-400"/><span className="text-[10px] font-black uppercase">45 мин доставка</span></div>
-            <div className="bg-white/5 border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-3"><MapPin size={18} className="text-orange-400"/><span className="text-[10px] font-black uppercase">Жулебино • Люберцы</span></div>
+        <div className="relative z-10 w-full max-w-3xl">
+          <h1 className="text-5xl md:text-8xl font-black italic tracking-tighter mb-10 leading-none">
+            Чайхана <br/>
+            <span className="text-orange-500">Жулебино</span>
+          </h1>
+          
+          <div className="flex flex-wrap justify-center gap-4">
+            <div className="bg-white/5 border border-white/10 px-8 py-4 rounded-2xl flex items-center gap-3 shadow-inner backdrop-blur-sm">
+              <Clock size={20} className="text-orange-400"/>
+              <span className="text-[11px] font-black uppercase tracking-widest">45 мин доставка</span>
+            </div>
+            <div className="bg-white/5 border border-white/10 px-8 py-4 rounded-2xl flex items-center gap-3 shadow-inner backdrop-blur-sm">
+              <MapPin size={20} className="text-orange-400"/>
+              <span className="text-[11px] font-black uppercase tracking-widest">Жулебинский бульвар дом 26</span>
+            </div>
           </div>
         </div>
       </div>

@@ -1,9 +1,11 @@
 
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, ShoppingCart, User, Phone, UtensilsCrossed, Settings } from 'lucide-react';
+import { Menu, X, ShoppingCart, User, Phone, UtensilsCrossed, Settings, MessageCircle, Send, Loader2 } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
+import Modal from './ui/Modal.tsx';
+import { api } from '../apiClient.ts';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,11 +13,37 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [supportMessage, setSupportMessage] = useState('');
+  const [isSendingSupport, setIsSendingSupport] = useState(false);
+  
   const { totalItems } = useCart();
   const { user, isAdmin } = useAuth();
   const location = useLocation();
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+  const handleSendSupport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supportMessage.trim()) return;
+    
+    setIsSendingSupport(true);
+    try {
+      await api.support.send({
+        user_id: user?.id,
+        user_name: user?.full_name || 'Анонимный гость',
+        message: supportMessage,
+        status: 'new'
+      });
+      setSupportMessage('');
+      setIsSupportModalOpen(false);
+      alert("Сообщение отправлено! Наш менеджер скоро ответит вам.");
+    } catch (err) {
+      alert("Ошибка при отправке. Попробуйте позже.");
+    } finally {
+      setIsSendingSupport(false);
+    }
+  };
 
   const navItems = [
     { path: '/', label: 'Меню', icon: <UtensilsCrossed size={20} /> },
@@ -92,7 +120,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               </li>
             ))}
             
-            {/* Ссылка для администратора в боковом меню */}
             {isAdmin && (
               <li className="pt-4 mt-4 border-t border-white/10">
                 <Link to="/admin" onClick={toggleSidebar} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition text-orange-400 font-black uppercase text-[10px] tracking-widest ${location.pathname === '/admin' ? 'bg-white/20' : 'hover:bg-white/10'}`}>
@@ -112,6 +139,28 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         {children}
       </main>
 
+      {/* Support Modal */}
+      <Modal isOpen={isSupportModalOpen} onClose={() => setIsSupportModalOpen(false)} title="Связаться с поддержкой">
+        <form onSubmit={handleSendSupport} className="space-y-6">
+          <p className="text-sm text-gray-500 font-medium">Опишите вашу проблему или задайте вопрос. Мы ответим вам в ближайшее время!</p>
+          <textarea 
+            required
+            rows={5}
+            value={supportMessage}
+            onChange={(e) => setSupportMessage(e.target.value)}
+            placeholder="Ваше сообщение..."
+            className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none focus:ring-4 focus:ring-amber-100 transition-all resize-none"
+          />
+          <button 
+            disabled={isSendingSupport}
+            className="w-full bg-amber-950 text-white py-6 rounded-[2.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-orange-600 transition-all flex items-center justify-center gap-3"
+          >
+            {isSendingSupport ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
+            Отправить
+          </button>
+        </form>
+      </Modal>
+
       {/* Footer */}
       <footer className="bg-amber-950 text-white py-12 mt-auto">
         <div className="container mx-auto px-4 text-center">
@@ -125,6 +174,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <Link to="/privacy" className="hover:text-white transition">Приватность</Link>
             <Link to="/contacts" className="hover:text-white transition">Контакты</Link>
           </div>
+          
+          <div className="mb-10">
+            <button 
+              onClick={() => setIsSupportModalOpen(true)}
+              className="inline-flex items-center gap-3 bg-white/5 border border-white/10 hover:bg-white/10 px-8 py-4 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] transition-all group"
+            >
+              <MessageCircle size={18} className="text-orange-400 group-hover:scale-110 transition-transform" />
+              Написать в поддержку
+            </button>
+          </div>
+
           <div className="space-y-1 mb-6">
             <p className="text-[10px] text-gray-500 uppercase tracking-widest">© 2025 Чайхана Жулебино. Все права защищены.</p>
             <p className="text-[9px] text-gray-500/60 font-medium tracking-wider">

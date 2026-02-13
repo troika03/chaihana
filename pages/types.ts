@@ -36,3 +36,12 @@ export interface Order {
   payment_status: 'pending' | 'succeeded' | 'failed';
   assigned_courier_id?: number;
 }
+
+export interface SupportMessage {
+  id: number;
+  user_id?: string;
+  user_name: string;
+  message: string;
+  created_at: string;
+  status: 'new' | 'read';
+}

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Minus, Plus, ShoppingBag, Loader2, ShieldCheck, CreditCard, Phone } from 'lucide-react';
+import { Trash2, Minus, Plus, ShoppingBag, Loader2, CreditCard, Phone, AlertCircle } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { api } from '../apiClient.ts';
@@ -17,9 +17,9 @@ const Checkout: React.FC = () => {
   const [comment, setValueComment] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentStep, setPaymentStep] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (items.length === 0 && !showSuccess) return (
+  if (items.length === 0) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-in zoom-in duration-500">
       <div className="bg-amber-100/50 p-10 rounded-[3rem]"><ShoppingBag size={64} className="text-amber-900/20" /></div>
       <h2 className="text-3xl font-black text-amber-950 italic tracking-tighter">Корзина пуста</h2>
@@ -29,14 +29,12 @@ const Checkout: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     if (!user) { navigate('/profile'); return; }
-    if (!phone) { alert("Пожалуйста, введите номер телефона для связи."); return; }
+    if (!phone) { setError("Пожалуйста, введите номер телефона для связи."); return; }
     
     setIsProcessing(true);
-    setPaymentStep(true);
+    setError(null);
 
     try {
-      // Формируем данные заказа, исключая поля, которых может не быть в БД (payment_method, payment_status)
-      // Оставляем только те, что подтверждены логами как существующие
       const orderPayload: any = { 
         user_id: user.id, 
         items, 
@@ -44,43 +42,43 @@ const Checkout: React.FC = () => {
         delivery_address: address, 
         contact_phone: phone,
         comment, 
-        status: 'pending'
+        status: 'pending',
+        payment_status: 'pending'
       };
 
-      // 1. Создаем заказ
       const order = await api.orders.create(orderPayload);
-
-      // 2. Инициируем имитацию оплаты ЮKassa
+      setPaymentStep(true);
+      
       const paymentResult = await initiateYooKassaPayment(order.id, totalAmount);
 
       if (paymentResult.success) {
         clearCart();
-        setShowSuccess(true);
+        // Если это демо-режим, просто переходим в профиль через небольшую паузу
+        if ((paymentResult as any).demo) {
+          setTimeout(() => navigate('/profile'), 1500);
+        }
       } else {
-        alert(`Оплата не прошла: ${paymentResult.message}. Заказ создан, вы можете оплатить его позже.`);
-        clearCart();
-        navigate('/profile');
+        setError(paymentResult.message);
+        setPaymentStep(false);
       }
     } catch (err: any) { 
       console.error("Checkout Error:", err);
-      alert(err.message || "Ошибка при создании заказа. Проверьте правильность данных."); 
+      setError("Ошибка при создании заказа. Попробуйте еще раз."); 
     } finally { 
       setIsProcessing(false); 
-      setPaymentStep(false);
     }
   };
 
-  if (showSuccess) return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-in fade-in duration-700">
-      <div className="w-32 h-32 bg-green-100 rounded-[3rem] flex items-center justify-center"><ShieldCheck size={56} className="text-green-600" /></div>
-      <h2 className="text-4xl font-black text-amber-950 italic tracking-tighter">Заказ принят!</h2>
-      <p className="text-gray-500 font-medium">Оплата успешно проведена через ЮKassa.<br/>Начинаем готовить ваш заказ.</p>
-      <button onClick={() => navigate('/')} className="px-10 py-5 bg-amber-950 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl">В начало</button>
-    </div>
-  );
-
   return (
     <div className="max-w-5xl mx-auto space-y-10 pb-20">
+      {error && (
+        <div className="bg-red-50 border border-red-100 p-6 rounded-[2rem] flex items-center gap-4 text-red-600 animate-in slide-in-from-top-4">
+          <AlertCircle size={24} />
+          <p className="font-bold text-sm uppercase tracking-wider">{error}</p>
+          <button onClick={() => setError(null)} className="ml-auto text-xs font-black opacity-50 hover:opacity-100">ЗАКРЫТЬ</button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 space-y-8">
           {step === 'cart' ? (
@@ -140,10 +138,9 @@ const Checkout: React.FC = () => {
         <div className="lg:col-span-1">
           <div className="bg-amber-950 text-white rounded-[4rem] p-10 sticky top-24 shadow-2xl space-y-8 text-center">
             {paymentStep ? (
-              <div className="py-10 space-y-6 animate-pulse">
-                <CreditCard size={48} className="mx-auto text-orange-500" />
-                <p className="font-black italic uppercase text-[10px] tracking-widest">Обработка через ЮKassa...</p>
-                <Loader2 className="animate-spin mx-auto text-white/20" size={32} />
+              <div className="py-10 space-y-6">
+                <Loader2 className="animate-spin mx-auto text-orange-500" size={48} />
+                <p className="font-black italic uppercase text-[10px] tracking-widest">Обработка платежа...</p>
               </div>
             ) : (
               <>
@@ -154,15 +151,12 @@ const Checkout: React.FC = () => {
                   disabled={isProcessing || (step === 'details' && (!address || !phone))}
                   className="w-full bg-orange-500 text-white py-6 rounded-[2.5rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-orange-600 disabled:opacity-30 transition-all"
                 >
-                  {isProcessing ? <Loader2 className="animate-spin mx-auto" /> : step === 'cart' ? 'Оформить' : 'Заказать и Оплатить'}
+                  {isProcessing ? <Loader2 className="animate-spin mx-auto" /> : step === 'cart' ? 'Продолжить' : 'Оплатить'}
                 </button>
                 <div className="flex items-center justify-center gap-2 opacity-30 mt-4">
                    <CreditCard size={14} />
-                   <span className="text-[8px] font-black uppercase tracking-widest">Безопасная оплата ЮKassa</span>
+                   <span className="text-[8px] font-black uppercase tracking-widest">Безопасная оплата через ЮKassa</span>
                 </div>
-                {step === 'details' && (
-                  <button onClick={() => setStep('cart')} className="w-full text-[10px] font-black uppercase opacity-40 hover:opacity-100 mt-4">Назад в корзину</button>
-                )}
               </>
             )}
           </div>

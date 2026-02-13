@@ -2,7 +2,19 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { api } from '../apiClient.ts';
-import { User as UserIcon, Package, Loader2, Clock, ShieldCheck, LogIn, UserPlus } from 'lucide-react';
+import { 
+  User as UserIcon, 
+  Package, 
+  Loader2, 
+  Clock, 
+  ShieldCheck, 
+  LogIn, 
+  UserPlus, 
+  XCircle, 
+  AlertTriangle 
+} from 'lucide-react';
+import Modal from '../components/ui/Modal.tsx';
+import { Order } from './types.ts';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Новый',
@@ -15,11 +27,13 @@ const STATUS_LABELS: Record<string, string> = {
 
 const Profile: React.FC = () => {
   const { user, signIn, signUp, signOut, isLoading } = useAuth();
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
   
   const [formData, setFormData] = useState({ 
     email: '', 
@@ -28,11 +42,19 @@ const Profile: React.FC = () => {
     address: ''
   });
 
-  useEffect(() => {
-    if (user) {
-      setIsLoadingOrders(true);
-      api.orders.getByUser(user.id).then(setOrders).finally(() => setIsLoadingOrders(false));
+  const loadOrders = async () => {
+    if (!user) return;
+    setIsLoadingOrders(true);
+    try {
+      const data = await api.orders.getByUser(user.id);
+      setOrders(data);
+    } finally {
+      setIsLoadingOrders(false);
     }
+  };
+
+  useEffect(() => {
+    loadOrders();
   }, [user]);
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -54,6 +76,20 @@ const Profile: React.FC = () => {
       setAuthError(msg);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!orderToCancel) return;
+    setIsCancelling(true);
+    try {
+      await api.orders.updateStatus(orderToCancel.id, 'cancelled');
+      setOrders(prev => prev.map(o => o.id === orderToCancel.id ? { ...o, status: 'cancelled' } : o));
+      setOrderToCancel(null);
+    } catch (err) {
+      alert("Не удалось отменить заказ. Пожалуйста, свяжитесь с поддержкой.");
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -168,24 +204,69 @@ const Profile: React.FC = () => {
         ) : (
           <div className="grid gap-4">
             {orders.map(order => (
-              <div key={order.id} className="bg-white p-8 rounded-[3rem] border border-amber-50 flex flex-col sm:flex-row justify-between items-center gap-4 hover:shadow-lg transition-shadow">
+              <div key={order.id} className="bg-white p-8 rounded-[3rem] border border-amber-50 flex flex-col sm:flex-row justify-between items-center gap-4 hover:shadow-lg transition-shadow overflow-hidden">
                 <div className="text-center sm:text-left">
-                  <h4 className="font-black text-amber-950 text-xl tracking-tight">Заказ на {order.total_amount} ₽</h4>
+                  <h4 className="font-black text-amber-950 text-xl tracking-tight">Заказ #{order.id.toString().slice(-4)} на {order.total_amount} ₽</h4>
                   <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest flex items-center gap-2 mt-1 justify-center sm:justify-start">
                     <Clock size={10} /> {new Date(order.created_at).toLocaleString('ru-RU')}
                   </p>
                 </div>
-                <span className={`px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest ${
-                  order.status === 'delivered' ? 'bg-green-100 text-green-700' : 
-                  order.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
-                }`}>
-                  {STATUS_LABELS[order.status] || order.status}
-                </span>
+                <div className="flex items-center gap-4">
+                  {order.status === 'pending' && (
+                    <button 
+                      onClick={() => setOrderToCancel(order)}
+                      className="p-3 text-red-300 hover:text-red-600 transition-colors bg-red-50 rounded-2xl"
+                      title="Отменить заказ"
+                    >
+                      <XCircle size={20} />
+                    </button>
+                  )}
+                  <span className={`px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest ${
+                    order.status === 'delivered' ? 'bg-green-100 text-green-700' : 
+                    order.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {STATUS_LABELS[order.status] || order.status}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal for Order Cancellation */}
+      <Modal 
+        isOpen={!!orderToCancel} 
+        onClose={() => setOrderToCancel(null)} 
+        title="Отмена заказа"
+      >
+        <div className="text-center space-y-8 py-4">
+          <div className="flex justify-center">
+            <div className="p-6 bg-red-50 rounded-full text-red-500 animate-pulse">
+              <AlertTriangle size={48} />
+            </div>
+          </div>
+          <div>
+            <p className="text-amber-950 font-black text-xl mb-2">Отменить заказ #{orderToCancel?.id.toString().slice(-4)}?</p>
+            <p className="text-gray-400 text-sm font-medium">Это действие нельзя будет отменить. Деньги (если оплачено) вернутся на ваш баланс в течение нескольких дней.</p>
+          </div>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => setOrderToCancel(null)} 
+              className="flex-1 py-5 bg-amber-50 text-amber-950 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-amber-100 transition-all"
+            >
+              Нет, оставить
+            </button>
+            <button 
+              onClick={confirmCancelOrder} 
+              disabled={isCancelling}
+              className="flex-1 py-5 bg-red-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl disabled:opacity-50"
+            >
+              {isCancelling ? <Loader2 size={16} className="animate-spin mx-auto" /> : "Да, отменить"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
