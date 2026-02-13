@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Loader2, Sparkles, MapPin, Clock, RefreshCw } from 'lucide-react';
+import { Search, Plus, Loader2, Sparkles, MapPin, Clock, RefreshCw, Slash } from 'lucide-react';
 import { api } from '../apiClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
@@ -103,17 +103,31 @@ const Home: React.FC = () => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10">
         {filtered.map(dish => (
-          <div key={dish.id} onClick={() => setSelectedDish(dish)} className="bg-white rounded-[3.5rem] overflow-hidden shadow-sm hover:shadow-3xl transition-all duration-700 transform hover:-translate-y-4 cursor-pointer group border border-amber-50/50">
+          <div 
+            key={dish.id} 
+            onClick={() => dish.available && setSelectedDish(dish)} 
+            className={`bg-white rounded-[3.5rem] overflow-hidden shadow-sm transition-all duration-700 transform border border-amber-50/50 ${dish.available ? 'hover:shadow-3xl hover:-translate-y-4 cursor-pointer group' : 'opacity-60 cursor-not-allowed grayscale-[0.5]'}`}
+          >
             <div className="h-72 overflow-hidden relative">
-              <img src={dish.image} alt={dish.name} className="w-full h-full object-cover transition duration-1000 group-hover:scale-110" />
-              <div className="absolute top-6 right-6 bg-white/95 px-5 py-2 rounded-2xl font-black text-amber-950 shadow-xl">{dish.price} ₽</div>
+              <img src={dish.image} alt={dish.name} className={`w-full h-full object-cover transition duration-1000 ${dish.available ? 'group-hover:scale-110' : ''}`} />
+              {dish.available ? (
+                <div className="absolute top-6 right-6 bg-white/95 px-5 py-2 rounded-2xl font-black text-amber-950 shadow-xl">{dish.price} ₽</div>
+              ) : (
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-6 text-center">
+                   <div className="bg-white/95 text-amber-950 font-black text-[10px] uppercase tracking-[0.3em] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-2">
+                     <Slash size={14} className="text-red-500" /> Нет в наличии
+                   </div>
+                </div>
+              )}
             </div>
             <div className="p-10">
-              <h3 className="font-black text-2xl text-amber-950 mb-3 group-hover:text-orange-600 transition-colors">{dish.name}</h3>
+              <h3 className={`font-black text-2xl mb-3 transition-colors ${dish.available ? 'text-amber-950 group-hover:text-orange-600' : 'text-amber-900/40'}`}>{dish.name}</h3>
               <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest line-clamp-2 h-8 mb-8">{dish.description}</p>
               <div className="flex items-center justify-between">
-                <span className="text-[9px] font-black uppercase text-orange-500 bg-orange-50 px-4 py-2 rounded-xl">{dish.category}</span>
-                <div className="w-12 h-12 bg-amber-950 text-white rounded-[1.2rem] flex items-center justify-center group-hover:bg-orange-500 transition-all duration-500 group-hover:rotate-90"><Plus size={24} /></div>
+                <span className={`text-[9px] font-black uppercase px-4 py-2 rounded-xl ${dish.available ? 'text-orange-500 bg-orange-50' : 'text-gray-400 bg-gray-100'}`}>{dish.category}</span>
+                {dish.available && (
+                  <div className="w-12 h-12 bg-amber-950 text-white rounded-[1.2rem] flex items-center justify-center group-hover:bg-orange-500 transition-all duration-500 group-hover:rotate-90"><Plus size={24} /></div>
+                )}
               </div>
             </div>
           </div>

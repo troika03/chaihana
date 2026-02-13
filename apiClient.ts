@@ -43,6 +43,20 @@ export const api = {
       } catch {
         return INITIAL_DISHES;
       }
+    },
+    create: async (dish: Partial<Dish>) => {
+      const { data, error } = await supabase.from('dishes').insert([dish]).select().single();
+      if (error) throw error;
+      return data;
+    },
+    update: async (id: number, dish: Partial<Dish>) => {
+      const { data, error } = await supabase.from('dishes').update(dish).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    delete: async (id: number) => {
+      const { error } = await supabase.from('dishes').delete().eq('id', id);
+      if (error) throw error;
     }
   },
 
