@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Loader2, Sparkles, MapPin, Clock, RefreshCw, Slash } from 'lucide-react';
 import { api } from '../apiClient.ts';
+import { supabase } from '../supabaseClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
 import Modal from '../components/ui/Modal.tsx';
@@ -41,6 +42,29 @@ const Home: React.FC = () => {
 
   useEffect(() => {
     loadDishes();
+
+    // Настройка Realtime для синхронизации стоп-листа
+    const channel = supabase
+      .channel('public:dishes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dishes' },
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const updatedDish = payload.new as Dish;
+            setDishes(prev => prev.map(d => d.id === updatedDish.id ? updatedDish : d));
+          } else if (payload.eventType === 'INSERT') {
+            setDishes(prev => [...prev, payload.new as Dish]);
+          } else if (payload.eventType === 'DELETE') {
+            setDishes(prev => prev.filter(d => d.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [loadDishes]);
 
   const filtered = dishes.filter(d => 
