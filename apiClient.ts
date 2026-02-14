@@ -2,6 +2,16 @@
 import { supabase } from './supabaseClient';
 import { Dish, Order, UserProfile } from './pages/types';
 
+/** 
+ * НАСТРОЙКИ TELEGRAM 
+ * Бот: @ChayhanaZhulebinoBot
+ * Чат/Группа: -5131291608
+ */
+const TELEGRAM_CONFIG = {
+  token: '7983984002:AAEkEqFjw8EC_xiIuyRbc2K_DHwqXml16k0',
+  chatId: '-5131291608' 
+};
+
 const INITIAL_DISHES: Dish[] = [
   { id: 1, name: 'Плов Чайханский', category: 'main', price: 450, image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800', description: 'Классический ферганский плов with нежной бараниной, желтой морковью и специями.', available: true },
   { id: 2, name: 'Лагман Уйгурский', category: 'soups', price: 380, image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=800', description: 'Традиционный суп with тянутой вручную лапшой, говядиной и овощами.', available: true },
@@ -9,23 +19,66 @@ const INITIAL_DISHES: Dish[] = [
   { id: 4, name: 'Салат Ачу-Чучук', category: 'salads', price: 290, image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800', description: 'Острый салат из тонко нарезанных томатов, лука и чили.', available: true },
   { id: 5, name: 'Шурпа', category: 'soups', price: 350, image: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=800', description: 'Наваристый мясной бульон with крупными кусками мяса и овощей.', available: true },
   { id: 6, name: 'Пахлава Медовая', category: 'desserts', price: 250, image: 'https://images.unsplash.com/photo-1519197924294-4ba991a11128?w=800', description: 'Традиционная сладость with грецким орехом и натуральным медом.', available: true },
-  { id: 7, name: 'Шашлык из баранины', category: 'main', price: 550, image: 'https://images.unsplash.com/photo-1529692236671-f1f6e994a52c?w=800', description: 'Нежная корейка ягненка, маринованная в восточных специях.', available: true },
+  { id: 7, name: 'Шашлык из баранины', category: 'main', price: 550, image: 'https://images.unsplash.com/photo-1529692236671-f1f6e994a52c?w=800', description: 'Нежная корейка ягненка, маринованная в восточных специями.', available: true },
   { id: 8, name: 'Зеленый чай with лотосом', category: 'drinks', price: 150, image: 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?w=800', description: 'Освежающий чай в пиалах.', available: true },
 ];
 
-const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
   return Promise.race([
     promise,
     new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs))
   ]);
 };
 
-const isConfigured = () => {
+const isConfigured = (): boolean => {
   try {
     const url = (supabase as any).supabaseUrl;
     return !!url && !url.includes('YOUR_PROJECT_ID');
   } catch {
     return false;
+  }
+};
+
+const sendTelegramNotification = async (order: Order) => {
+  const { token, chatId } = TELEGRAM_CONFIG;
+  if (!token || !chatId) return;
+
+  try {
+    const itemsList = order.items
+      .map(item => `• <b>${item.dish.name}</b> x${item.quantity}`)
+      .join('\n');
+
+    const message = `
+<b>🚚 ЗАКАЗ ПЕРЕДАН КУРЬЕРУ</b>
+──────────────────
+🆔 <b>Заказ:</b> #${order.id.toString().slice(-4)}
+💰 <b>Сумма:</b> ${order.total_amount} ₽
+📞 <b>Телефон:</b> <a href="tel:${order.contact_phone}">${order.contact_phone || 'Не указан'}</a>
+📍 <b>Адрес:</b> ${order.delivery_address || 'Самовывоз'}
+💬 <b>Коммент:</b> ${order.comment || 'Нет'}
+──────────────────
+📝 <b>Состав:</b>
+${itemsList}
+──────────────────
+✅ <b>Статус:</b> Принят в работу
+    `;
+
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'HTML',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Telegram API Error:', errorData);
+    }
+  } catch (err) {
+    console.error('Failed to send Telegram notification:', err);
   }
 };
 
@@ -52,13 +105,7 @@ export const api = {
             upsert: false
           });
 
-        if (uploadError) {
-          // Специальная обработка ошибки RLS (Row-Level Security)
-          if (uploadError.message.includes('row-level security policy')) {
-            throw new Error('Ошибка доступа (RLS) в Supabase. Убедитесь, что для бакета "dishes" настроены политики INSERT в разделе Storage -> Policies.');
-          }
-          throw uploadError;
-        }
+        if (uploadError) throw uploadError;
 
         const { data } = supabase.storage
           .from('dishes')
@@ -121,7 +168,9 @@ export const api = {
           throw adminError;
         }
 
-        const userId = adminData.user.id;
+        const userId = adminData?.user?.id;
+        if (!userId) throw new Error("Не удалось создать пользователя.");
+
         const userRole = (email === 'himikovhoma@gmail.com' ? 'admin' : 'user') as 'admin' | 'user';
         const profile: UserProfile = { id: userId, full_name: name, address: address || '', role: userRole };
 
@@ -151,7 +200,7 @@ export const api = {
         }
 
         if (authError) throw authError;
-        if (!authData.user) throw new Error("Ошибка авторизации");
+        if (!authData?.user) throw new Error("Ошибка авторизации");
 
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', authData.user.id).maybeSingle();
         const userRole = (email === 'himikovhoma@gmail.com' ? 'admin' : 'user') as 'admin' | 'user';
@@ -164,7 +213,7 @@ export const api = {
         return profile as UserProfile;
       })();
 
-      return await withTimeout(signInPromise, 5000, { id: 'error', full_name: 'Таймаут входа', address: '', role: 'user' });
+      return await withTimeout(signInPromise, 5000, { id: 'error', full_name: 'Ошибка входа', address: '', role: 'user' });
     },
 
     signOut: async () => {
@@ -194,11 +243,28 @@ export const api = {
   },
 
   orders: {
+    testBot: async () => {
+      const { token, chatId } = TELEGRAM_CONFIG;
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: '🔔 <b>Тестовое сообщение:</b> Связь с Чайханой Жулебино установлена!',
+            parse_mode: 'HTML',
+          }),
+        });
+        return await res.json();
+      } catch (err: any) {
+        return { ok: false, description: err.message };
+      }
+    },
     create: async (orderData: Partial<Order>) => {
-      if (!isConfigured()) return { ...orderData, id: Date.now() };
+      if (!isConfigured()) return { ...orderData, id: Date.now() } as Order;
       const { data, error } = await supabase.from('orders').insert([orderData]).select().single();
       if (error) throw error;
-      return data;
+      return data as Order;
     },
     getByUser: async (userId: string) => {
       const { data } = await supabase.from('orders').select('*').eq('user_id', userId).order('created_at', { ascending: false });
@@ -209,7 +275,13 @@ export const api = {
       return data || [];
     },
     updateStatus: async (id: number, status: Order['status']) => {
-      await supabase.from('orders').update({ status }).eq('id', id);
+      const { data: updatedOrder, error } = await supabase.from('orders').update({ status }).eq('id', id).select().single();
+      if (error) throw error;
+
+      // Уведомление в Telegram курьеру отправляется ТОЛЬКО когда статус меняется на "Принят" (confirmed)
+      if (status === 'confirmed' && updatedOrder) {
+        await sendTelegramNotification(updatedOrder as Order);
+      }
     }
   }
 };

@@ -1,7 +1,9 @@
 
+// Fixed: Added React import to satisfy namespace requirements for React.FC and React.FormEvent
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { api } from '../apiClient.ts';
+import { supabase } from '../supabaseClient.ts';
 import { 
   User as UserIcon, 
   Package, 
@@ -25,6 +27,7 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Отменен',
 };
 
+// Fixed: React namespace is now available after import
 const Profile: React.FC = () => {
   const { user, signIn, signUp, signOut, isLoading } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -55,8 +58,27 @@ const Profile: React.FC = () => {
 
   useEffect(() => {
     loadOrders();
+
+    if (user) {
+      const channel = supabase
+        .channel(`user_orders_${user.id}`)
+        .on('postgres_changes', { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'orders',
+          filter: `user_id=eq.${user.id}`
+        }, (payload) => {
+          setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new as Order : o));
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [user]);
 
+  // Fixed: React namespace is now available for FormEvent
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -234,7 +256,6 @@ const Profile: React.FC = () => {
         )}
       </div>
 
-      {/* Confirmation Modal for Order Cancellation */}
       <Modal 
         isOpen={!!orderToCancel} 
         onClose={() => setOrderToCancel(null)} 

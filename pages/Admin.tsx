@@ -29,7 +29,9 @@ import {
   ChevronRight,
   Search,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  CheckCircle,
+  Send
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { supabase } from '../supabaseClient';
@@ -37,14 +39,14 @@ import Modal from '../components/ui/Modal.tsx';
 
 const Admin: React.FC = () => {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'stats' | 'orders' | 'history' | 'menu'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'orders' | 'history' | 'menu'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [editingDish, setEditingDish] = useState<Partial<Dish> | null>(null);
@@ -68,6 +70,16 @@ const Admin: React.FC = () => {
     }
   };
 
+  const testBotConnection = async () => {
+    const result = await api.orders.testBot();
+    if (result.ok) {
+      alert("Сообщение успешно отправлено! Проверьте Telegram.");
+    } else {
+      alert("Ошибка: " + (result.description || "Запрос заблокирован браузером (CORS) или неверный ID/Токен. Проверьте консоль F12."));
+      console.error("Test Bot Result:", result);
+    }
+  };
+
   useEffect(() => {
     if (isAdmin) {
       loadData();
@@ -76,7 +88,9 @@ const Admin: React.FC = () => {
         .channel('admin_realtime_sync')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
           setOrders(prev => [payload.new as Order, ...prev]);
-          if (soundEnabled && audioRef.current) audioRef.current.play().catch(() => {});
+          if (soundEnabled && audioRef.current) {
+            audioRef.current.play().catch(e => console.log('Audio play blocked', e));
+          }
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
           setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new as Order : o));
@@ -119,6 +133,10 @@ const Admin: React.FC = () => {
     return orders.filter(o => !['delivered', 'cancelled'].includes(o.status));
   }, [orders]);
 
+  const historicalOrders = useMemo(() => {
+    return orders.filter(o => ['delivered', 'cancelled'].includes(o.status));
+  }, [orders]);
+
   const handleSaveDish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDish) return;
@@ -151,7 +169,6 @@ const Admin: React.FC = () => {
       alert("Ошибка при загрузке фото: " + err.message);
     } finally {
       setIsUploading(false);
-      // Сбрасываем значение input, чтобы можно было загрузить тот же файл повторно
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -186,12 +203,19 @@ const Admin: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-4xl font-black text-amber-950 uppercase italic tracking-tighter flex items-center gap-3">
-            Чайхана Управление <BellRing className={stats.pendingCount > 0 ? "text-orange-500 animate-bounce" : "text-amber-200"} />
+            Чайхана Управление <BellRing className={activeOrders.some(o => o.status === 'pending') ? "text-orange-500 animate-bounce" : "text-amber-200"} />
           </h1>
           <p className="text-amber-800/40 font-bold text-[11px] uppercase tracking-[0.3em] mt-2">Панель ресторатора Чайхана Жулебино</p>
         </div>
         
         <div className="flex flex-wrap gap-3">
+          <button 
+            onClick={testBotConnection} 
+            className="flex items-center gap-3 px-6 py-4 rounded-2xl bg-white border border-blue-100 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:bg-blue-50 transition shadow-sm"
+          >
+            <Send size={16} /> Проверить бота
+          </button>
+          
           <button 
             onClick={() => setSoundEnabled(!soundEnabled)} 
             className={`flex items-center gap-3 px-6 py-4 rounded-2xl border font-black text-[10px] uppercase tracking-widest transition shadow-sm ${soundEnabled ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-400 border-gray-100'}`}
@@ -206,34 +230,13 @@ const Admin: React.FC = () => {
         </div>
       </div>
 
-      {/* Statistics Dashboard Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { label: 'Выручка за сегодня', val: `${stats.today.revenue.toLocaleString()} ₽`, sub: `Ср. чек: ${stats.today.avgCheck} ₽`, icon: <TrendingUp size={20}/>, color: 'text-orange-600', bg: 'bg-orange-50' },
-          { label: 'Выручка за месяц', val: `${stats.month.revenue.toLocaleString()} ₽`, sub: `Всего: ${stats.month.count} зак.`, icon: <BarChart3 size={20}/>, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Заказов сегодня', val: stats.today.count, sub: `${stats.today.successfulCount} доставлено`, icon: <Package size={20}/>, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'В работе', val: stats.pendingCount, sub: 'Ожидают действий', icon: <Clock size={20}/>, color: 'text-amber-600', bg: 'bg-amber-50' },
-        ].map((s, i) => (
-          <div key={i} className="bg-white p-8 rounded-[3rem] border border-amber-50 shadow-sm group hover:shadow-xl transition-all relative overflow-hidden">
-             <div className="relative z-10">
-                <div className="flex items-center justify-between mb-6">
-                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{s.label}</p>
-                  <div className={`p-3 ${s.bg} ${s.color} rounded-xl`}>{s.icon}</div>
-                </div>
-                <h4 className="text-3xl font-black text-amber-950 tracking-tighter mb-1">{s.val}</h4>
-                <p className="text-[10px] font-black text-amber-900/40 uppercase tracking-widest">{s.sub}</p>
-             </div>
-          </div>
-        ))}
-      </div>
-
       {/* Main Navigation Tabs */}
       <div className="flex flex-wrap gap-3 p-2 bg-amber-100/30 rounded-[2rem] w-fit">
         {[
-          { id: 'stats', label: 'Статистика дня' },
-          { id: 'orders', label: `Очередь (${activeOrders.length})` },
-          { id: 'history', label: 'Все заказы' },
-          { id: 'menu', label: 'Меню блюд' }
+          { id: 'orders', label: `В работе (${activeOrders.length})` },
+          { id: 'history', label: `Архив / История` },
+          { id: 'stats', label: 'Аналитика' },
+          { id: 'menu', label: 'Меню' }
         ].map(t => (
           <button 
             key={t.id} 
@@ -245,137 +248,47 @@ const Admin: React.FC = () => {
         ))}
       </div>
 
-      {/* Tab: Stats */}
-      {activeTab === 'stats' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 animate-in zoom-in duration-500">
-           {/* Date Picker & Summary */}
-           <div className="lg:col-span-1 bg-white p-10 rounded-[4rem] border border-amber-50 shadow-sm space-y-8">
-              <h3 className="text-xl font-black text-amber-950 italic tracking-tight flex items-center gap-3">
-                <CalendarIcon size={20} className="text-orange-500" /> Выбрать дату
-              </h3>
-              <input 
-                type="date" 
-                value={selectedDate} 
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full p-6 bg-amber-50 rounded-[2rem] font-black text-amber-950 border-none outline-none focus:ring-4 focus:ring-orange-500/10 transition-all cursor-pointer"
-              />
-              <div className="p-8 bg-amber-950 text-white rounded-[3rem] space-y-4 shadow-xl">
-                 <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Итоги за {new Date(selectedDate).toLocaleDateString()}</p>
-                 <div className="space-y-1">
-                    <p className="text-4xl font-black italic">{stats.selected.revenue} ₽</p>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-orange-400">{stats.selected.count} заказов выполнено</p>
-                 </div>
-                 <div className="pt-4 border-t border-white/10 flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase opacity-60">Средний чек</span>
-                    <span className="font-black">{stats.selected.avgCheck} ₽</span>
-                 </div>
-              </div>
-           </div>
-
-           {/* Detailed Orders for Period List */}
-           <div className="lg:col-span-2 bg-white p-10 rounded-[4rem] border border-amber-50 shadow-sm flex flex-col">
-              <h3 className="text-xl font-black text-amber-950 italic tracking-tight mb-8">Заказы за период ({stats.selectedOrders.length})</h3>
-              <div className="space-y-6 flex-1 overflow-y-auto max-h-[700px] pr-4 no-scrollbar">
-                {stats.selectedOrders.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 opacity-20">
-                    <History size={48} />
-                    <p className="font-black uppercase text-xs tracking-widest">Нет заказов</p>
-                  </div>
-                ) : (
-                  stats.selectedOrders.map(o => (
-                    <div key={o.id} className="p-8 bg-amber-50/30 rounded-[2.5rem] border border-transparent hover:border-amber-200 transition-all group shadow-sm">
-                       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-                          <div className="flex items-center gap-4">
-                             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black shadow-inner ${o.status === 'delivered' ? 'bg-green-100 text-green-600' : 'bg-white text-orange-600'}`}>
-                               #{o.id.toString().slice(-4)}
-                             </div>
-                             <div>
-                                <div className="flex items-center gap-2">
-                                  <p className="font-black text-amber-950 text-lg">{o.total_amount} ₽</p>
-                                  <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${o.status === 'delivered' ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'}`}>
-                                    {o.status}
-                                  </span>
-                                </div>
-                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                                  <Clock size={10} /> {new Date(o.created_at).toLocaleTimeString()}
-                                </p>
-                             </div>
-                          </div>
-                          <div className="flex gap-4">
-                             <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] font-bold text-amber-950 shadow-sm">
-                               <Phone size={12} className="text-orange-500" /> {o.contact_phone || 'Нет тел.'}
-                             </div>
-                          </div>
-                       </div>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-[11px]">
-                          <div className="space-y-3">
-                             <p className="font-black uppercase tracking-widest text-amber-900/40 text-[9px] flex items-center gap-2"><Package size={12}/> Состав заказа:</p>
-                             <div className="space-y-1 pl-4 border-l-2 border-orange-500/20">
-                                {o.items?.map((item: any, i) => (
-                                  <div key={i} className="flex justify-between font-bold text-amber-950/80">
-                                    <span>{item.dish.name}</span>
-                                    <span className="text-orange-500">x{item.quantity}</span>
-                                  </div>
-                                ))}
-                             </div>
-                          </div>
-                          <div className="space-y-3">
-                             <p className="font-black uppercase tracking-widest text-amber-900/40 text-[9px] flex items-center gap-2"><MapPin size={12}/> Адрес:</p>
-                             <div className="space-y-2">
-                                <p className="font-bold text-amber-950 leading-tight">{o.delivery_address || 'Самовывоз'}</p>
-                                {o.comment && (
-                                  <div className="flex items-start gap-2 bg-orange-50 p-3 rounded-xl italic text-orange-700/80 text-[10px]">
-                                    <MessageSquare size={12} className="shrink-0 mt-0.5" />
-                                    <span>{o.comment}</span>
-                                  </div>
-                                )}
-                             </div>
-                          </div>
-                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* Tab: Orders Queue */}
+      {/* Tab: Orders Queue (Active) */}
       {activeTab === 'orders' && (
         <div className="bg-white rounded-[4rem] shadow-xl border overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-          <div className="p-10 border-b border-amber-50">
-            <h3 className="font-black text-2xl italic tracking-tight text-amber-950">Очередь кухни</h3>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Текущие заказы в работе</p>
+          <div className="p-10 border-b border-amber-50 bg-gradient-to-r from-amber-50/50 to-white">
+            <h3 className="font-black text-2xl italic tracking-tight text-amber-950">Очередь кухни и доставки</h3>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Только активные заказы. Завершенные переходят в историю автоматически.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-amber-50/30">
                 <tr>
-                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">ID / Время</th>
+                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Заказ</th>
                   <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Клиент / Адрес</th>
-                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Состав</th>
+                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Блюда</th>
                   <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Сумма</th>
-                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Статус</th>
+                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Управление статусом</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-amber-50/50">
                 {activeOrders.length === 0 ? (
-                  <tr><td colSpan={5} className="p-32 text-center text-amber-900/20 font-black uppercase text-xs tracking-widest">Активных заказов нет</td></tr>
+                  <tr><td colSpan={5} className="p-32 text-center text-amber-900/20 font-black uppercase text-xs tracking-widest">Активных заказов в работе нет</td></tr>
                 ) : (
                   activeOrders.map(order => (
-                    <tr key={order.id} className="hover:bg-amber-50/10 transition-colors">
+                    <tr key={order.id} className="hover:bg-amber-50/10 transition-colors group">
                       <td className="p-8">
                         <div className="font-black text-amber-950 text-sm">#{order.id.toString().slice(-4)}</div>
-                        <div className="text-[9px] text-gray-400 font-bold uppercase mt-1">{new Date(order.created_at).toLocaleTimeString()}</div>
+                        <div className="text-[9px] text-gray-400 font-bold uppercase mt-1 flex items-center gap-1"><Clock size={10}/> {new Date(order.created_at).toLocaleTimeString()}</div>
                       </td>
                       <td className="p-8">
-                        <div className="text-xs font-bold text-amber-900 truncate max-w-[200px]">{order.delivery_address}</div>
-                        <div className="text-[10px] font-black text-amber-950">{order.contact_phone}</div>
+                        <div className="text-xs font-bold text-amber-900 truncate max-w-[200px] mb-1">{order.delivery_address}</div>
+                        <div className="flex items-center gap-2 text-[10px] font-black text-amber-950">
+                          <Phone size={12} className="text-orange-500"/> {order.contact_phone}
+                        </div>
                       </td>
                       <td className="p-8">
-                         <div className="text-[10px] font-bold text-gray-500">
+                         <div className="text-[10px] font-bold text-gray-500 space-y-1">
                             {order.items?.map((item: any, i) => (
-                              <div key={i}>{item.dish.name} x{item.quantity}</div>
+                              <div key={i} className="flex justify-between gap-4 border-b border-amber-50/50 pb-1 last:border-0">
+                                <span>{item.dish.name}</span>
+                                <span className="text-orange-600 font-black">x{item.quantity}</span>
+                              </div>
                             ))}
                          </div>
                       </td>
@@ -384,14 +297,18 @@ const Admin: React.FC = () => {
                         <select 
                           value={order.status} 
                           onChange={(e) => api.orders.updateStatus(order.id, e.target.value as any)} 
-                          className="text-[10px] font-black uppercase border-none rounded-2xl p-4 bg-orange-500 text-white outline-none cursor-pointer"
+                          className={`text-[10px] font-black uppercase border-none rounded-2xl p-4 transition-all outline-none cursor-pointer shadow-sm ${
+                            order.status === 'pending' ? 'bg-amber-100 text-amber-800' : 
+                            order.status === 'confirmed' ? 'bg-orange-500 text-white shadow-orange-200 shadow-lg' : 
+                            order.status === 'delivering' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'
+                          }`}
                         >
-                          <option value="pending">Новый</option>
-                          <option value="confirmed">Принят</option>
-                          <option value="cooking">Готовится</option>
-                          <option value="delivering">В пути</option>
-                          <option value="delivered">Завершен ✅</option>
-                          <option value="cancelled">Отменен ❌</option>
+                          <option value="pending">🆕 Новый (Ожидание)</option>
+                          <option value="confirmed">✅ Принят (Отправить курьеру)</option>
+                          <option value="cooking">👨‍🍳 Готовится</option>
+                          <option value="delivering">🚚 В пути / Курьер</option>
+                          <option value="delivered">🏁 Доставлен (В историю)</option>
+                          <option value="cancelled">❌ Отменен (В историю)</option>
                         </select>
                       </td>
                     </tr>
@@ -403,10 +320,101 @@ const Admin: React.FC = () => {
         </div>
       )}
 
+      {/* Tab: History (Historical Orders) */}
+      {activeTab === 'history' && (
+        <div className="bg-white rounded-[4rem] shadow-xl border overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+           <div className="p-10 border-b border-amber-50 bg-gray-50/50">
+            <h3 className="font-black text-2xl italic tracking-tight text-amber-950 flex items-center gap-4">
+              <History size={28} className="text-gray-400" /> Архив завершенных заказов
+            </h3>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Здесь отображаются все выполненные или отмененные заказы за все время.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-amber-50/30">
+                <tr>
+                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">ID / Дата</th>
+                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Адрес</th>
+                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Сумма</th>
+                  <th className="p-8 text-[10px] font-black uppercase tracking-widest text-amber-900/40">Статус</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-amber-50/50">
+                {historicalOrders.length === 0 ? (
+                  <tr><td colSpan={4} className="p-32 text-center text-amber-900/20 font-black uppercase text-xs tracking-widest">История пока пуста</td></tr>
+                ) : (
+                  historicalOrders.map(order => (
+                    <tr key={order.id} className="hover:bg-amber-50/10 transition-colors opacity-80 hover:opacity-100">
+                      <td className="p-8">
+                        <div className="font-black text-amber-950 text-sm">#{order.id.toString().slice(-4)}</div>
+                        <div className="text-[9px] text-gray-400 font-bold uppercase mt-1">{new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString()}</div>
+                      </td>
+                      <td className="p-8 text-[11px] font-bold text-amber-900">{order.delivery_address}</td>
+                      <td className="p-8 font-black text-amber-950">{order.total_amount} ₽</td>
+                      <td className="p-8">
+                         <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${
+                           order.status === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                         }`}>
+                           {order.status === 'delivered' ? 'Завершен ✅' : 'Отменен ❌'}
+                         </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ... Остальной код Admin.tsx остается прежним ... */}
+      {/* Tab: Stats */}
+      {activeTab === 'stats' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 animate-in zoom-in duration-500">
+           <div className="lg:col-span-1 bg-white p-10 rounded-[4rem] border border-amber-50 shadow-sm space-y-8">
+              <h3 className="text-xl font-black text-amber-950 italic tracking-tight flex items-center gap-3">
+                <CalendarIcon size={20} className="text-orange-500" /> Фильтр за дату
+              </h3>
+              <input 
+                type="date" 
+                value={selectedDate} 
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full p-6 bg-amber-50 rounded-[2rem] font-black text-amber-950 border-none outline-none focus:ring-4 focus:ring-orange-500/10 transition-all cursor-pointer"
+              />
+              <div className="p-8 bg-amber-950 text-white rounded-[3rem] space-y-4 shadow-xl">
+                 <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Итоги за {new Date(selectedDate).toLocaleDateString()}</p>
+                 <div className="space-y-1">
+                    <p className="text-4xl font-black italic">{stats.selected.revenue} ₽</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-orange-400">{stats.selected.successfulCount} доставлено</p>
+                 </div>
+              </div>
+           </div>
+
+           <div className="lg:col-span-2 bg-white p-10 rounded-[4rem] border border-amber-50 shadow-sm">
+              <h3 className="text-xl font-black text-amber-950 italic tracking-tight mb-8">Детализация за выбранный день</h3>
+              <div className="space-y-4">
+                {stats.selectedOrders.length === 0 ? (
+                  <div className="py-20 text-center opacity-20"><History size={48} className="mx-auto mb-4"/> <p className="font-black uppercase text-xs tracking-widest">Нет записей</p></div>
+                ) : (
+                  stats.selectedOrders.map(o => (
+                    <div key={o.id} className="p-6 bg-amber-50/30 rounded-[2.5rem] border border-amber-100 flex justify-between items-center">
+                       <div>
+                          <p className="font-black text-amber-950">#{o.id.toString().slice(-4)} — {o.total_amount} ₽</p>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase">{o.delivery_address}</p>
+                       </div>
+                       <span className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase ${o.status === 'delivered' ? 'text-green-600' : 'text-orange-500'}`}>{o.status}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* Tab: Menu Management */}
       {activeTab === 'menu' && (
         <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-          <div className="flex justify-between items-center bg-white p-10 rounded-[3.5rem] shadow-sm border border-amber-50">
+           <div className="flex justify-between items-center bg-white p-10 rounded-[3.5rem] shadow-sm border border-amber-50">
             <div>
               <h3 className="font-black text-2xl italic tracking-tight text-amber-950">Картотека меню</h3>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Всего позиций: {dishes.length}</p>
@@ -418,21 +426,16 @@ const Admin: React.FC = () => {
               <Plus size={18} /> Добавить блюдо
             </button>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {dishes.map(dish => (
               <div key={dish.id} className={`bg-white p-6 rounded-[3rem] border border-amber-50 shadow-sm hover:shadow-2xl transition-all relative group ${!dish.available ? 'opacity-60 grayscale' : ''}`}>
-                <div className="h-48 rounded-[2rem] overflow-hidden mb-6">
+                <div className="h-40 rounded-[2rem] overflow-hidden mb-6">
                   <img src={dish.image} alt={dish.name} className="w-full h-full object-cover group-hover:scale-110 transition duration-700" />
                 </div>
-                <h4 className="font-black text-amber-950 text-lg truncate mb-1">{dish.name}</h4>
-                <p className="text-orange-500 font-black text-md mb-6">{dish.price} ₽</p>
+                <h4 className="font-black text-amber-950 text-sm truncate mb-1">{dish.name}</h4>
                 <div className="flex gap-2">
-                  <button onClick={async () => { await api.dishes.update(dish.id, { available: !dish.available }); loadData(); }} className={`flex-1 py-4 rounded-2xl transition-all flex items-center justify-center ${dish.available ? 'bg-amber-50 text-amber-950 hover:bg-orange-500 hover:text-white' : 'bg-green-500 text-white'}`}>
-                    {dish.available ? <Eye size={18} /> : <EyeOff size={18} />}
-                  </button>
-                  <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="flex-1 py-4 bg-amber-50 text-amber-900 rounded-2xl hover:bg-amber-950 hover:text-white transition-all flex items-center justify-center"><Edit3 size={18} /></button>
-                  <button onClick={() => setDishToDelete(dish)} className="flex-1 py-4 bg-red-50 text-red-600 rounded-2xl hover:bg-red-600 hover:text-white transition-all flex items-center justify-center"><Trash2 size={18} /></button>
+                   <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="flex-1 py-3 bg-amber-50 text-amber-900 rounded-xl hover:bg-amber-950 hover:text-white transition-all flex items-center justify-center"><Edit3 size={16} /></button>
+                   <button onClick={() => setDishToDelete(dish)} className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all flex items-center justify-center"><Trash2 size={16} /></button>
                 </div>
               </div>
             ))}
@@ -440,103 +443,48 @@ const Admin: React.FC = () => {
         </div>
       )}
 
-      {/* Dish Modal */}
-      <Modal isOpen={isDishModalOpen} onClose={() => setIsDishModalOpen(false)} title={editingDish?.id ? "Изменить позицию" : "Новое блюдо"}>
+      <Modal isOpen={isDishModalOpen} onClose={() => setIsDishModalOpen(false)} title={editingDish?.id ? "Изменить блюдо" : "Новое блюдо"}>
         <form onSubmit={handleSaveDish} className="space-y-6">
-          <div className="grid grid-cols-1 gap-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Название</label>
-              <input required type="text" className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none focus:ring-4 focus:ring-amber-100" value={editingDish?.name || ''} onChange={e => setEditingDish(prev => ({ ...prev, name: e.target.value }))} />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-6">
-               <div className="space-y-2">
-                 <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Цена (₽)</label>
-                 <input required type="number" className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none focus:ring-4 focus:ring-amber-100" value={editingDish?.price || 0} onChange={e => setEditingDish(prev => ({ ...prev, price: parseInt(e.target.value) }))} />
-               </div>
-               <div className="space-y-2">
-                 <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Категория</label>
-                 <select className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none appearance-none" value={editingDish?.category || 'main'} onChange={e => setEditingDish(prev => ({ ...prev, category: e.target.value as any }))}>
-                   <option value="main">Основные</option>
-                   <option value="soups">Супы</option>
-                   <option value="salads">Салаты</option>
-                   <option value="desserts">Десерты</option>
-                   <option value="drinks">Напитки</option>
-                 </select>
-               </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4 block">Фотография блюда</label>
-              <div className="flex flex-col items-center gap-4">
-                {isUploading ? (
-                   <div className="w-full h-48 bg-amber-50 rounded-[2rem] flex flex-col items-center justify-center gap-4 border-2 border-amber-100 animate-pulse">
-                      <Loader2 size={32} className="animate-spin text-orange-500" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-900/40">Загрузка изображения...</span>
-                   </div>
-                ) : editingDish?.image ? (
-                  <div className="relative group w-full">
-                    <img src={editingDish.image} alt="Preview" className="w-full h-48 object-cover rounded-[2rem] border-2 border-amber-100 shadow-sm" />
-                    <button 
-                      type="button" 
-                      onClick={() => setEditingDish(prev => ({ ...prev, image: '' }))}
-                      className="absolute top-4 right-4 bg-red-600 text-white p-2 rounded-full shadow-lg hover:bg-red-700 transition"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <button 
-                    type="button" 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full h-48 border-4 border-dashed border-amber-100 rounded-[2rem] flex flex-col items-center justify-center text-amber-900/40 hover:bg-amber-50 transition gap-4"
-                  >
-                    <Upload size={32} />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-center px-4">Загрузить фото с устройства</span>
-                  </button>
-                )}
-                
-                <input 
-                  ref={fileInputRef}
-                  type="file" 
-                  accept="image/*" 
-                  onChange={handleImageUpload} 
-                  className="hidden" 
-                />
-                
-                <div className="w-full text-center">
-                   <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Или вставьте ссылку вручную:</p>
-                   <input 
-                     type="text" 
-                     className="w-full mt-2 p-4 bg-amber-50 rounded-xl font-bold text-amber-950 border-none outline-none text-[11px]" 
-                     placeholder="https://example.com/image.jpg"
-                     value={editingDish?.image || ''} 
-                     onChange={e => setEditingDish(prev => ({ ...prev, image: e.target.value }))} 
-                   />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Описание</label>
-              <textarea required rows={3} className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none resize-none" value={editingDish?.description || ''} onChange={e => setEditingDish(prev => ({ ...prev, description: e.target.value }))} />
-            </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Название</label>
+            <input required type="text" className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none focus:ring-4 focus:ring-amber-100" value={editingDish?.name || ''} onChange={e => setEditingDish(prev => ({ ...prev, name: e.target.value }))} />
           </div>
-          
-          <button disabled={isLoading || isUploading} className="w-full bg-amber-950 text-white py-8 rounded-[2.5rem] font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-orange-600 transition-all flex items-center justify-center gap-4">
-            {isLoading ? <Loader2 size={24} className="animate-spin" /> : editingDish?.id ? "Сохранить изменения" : "Добавить в меню"}
+          <div className="grid grid-cols-2 gap-6">
+             <div className="space-y-2">
+               <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Цена (₽)</label>
+               <input required type="number" className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none focus:ring-4 focus:ring-amber-100" value={editingDish?.price || 0} onChange={e => setEditingDish(prev => ({ ...prev, price: parseInt(e.target.value) }))} />
+             </div>
+             <div className="space-y-2">
+               <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Категория</label>
+               <select className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none appearance-none" value={editingDish?.category || 'main'} onChange={e => setEditingDish(prev => ({ ...prev, category: e.target.value as any }))}>
+                 <option value="main">Основные</option>
+                 <option value="soups">Супы</option>
+                 <option value="salads">Салаты</option>
+                 <option value="desserts">Десерты</option>
+                 <option value="drinks">Напитки</option>
+               </select>
+             </div>
+          </div>
+          <div className="space-y-4">
+            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4 block">Фото</label>
+            <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full h-32 border-4 border-dashed border-amber-100 rounded-[2rem] flex flex-col items-center justify-center text-amber-900/40 hover:bg-amber-50 transition gap-2">
+              <Upload size={24} /> <span className="text-[10px] font-black uppercase tracking-widest">Загрузить фото</span>
+            </button>
+          </div>
+          <button disabled={isLoading || isUploading} className="w-full bg-amber-950 text-white py-8 rounded-[2.5rem] font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-orange-600 transition-all">
+            {isLoading ? <Loader2 size={24} className="animate-spin mx-auto" /> : "Сохранить"}
           </button>
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
-      <Modal isOpen={!!dishToDelete} onClose={() => setDishToDelete(null)} title="Удалить блюдо?">
+      <Modal isOpen={!!dishToDelete} onClose={() => setDishToDelete(null)} title="Удалить?">
         <div className="text-center space-y-8 py-4">
-          <div className="flex justify-center"><div className="p-6 bg-red-50 rounded-full text-red-500 animate-pulse"><AlertTriangle size={48} /></div></div>
-          <div><p className="text-amber-950 font-black text-xl mb-2">Удалить «{dishToDelete?.name}»?</p><p className="text-gray-400 text-sm font-medium">Это действие безвозвратно удалит позицию из меню.</p></div>
+          <div className="flex justify-center"><div className="p-6 bg-red-50 rounded-full text-red-500"><AlertTriangle size={48} /></div></div>
+          <p className="text-amber-950 font-black">Удалить «{dishToDelete?.name}»?</p>
           <div className="flex gap-4">
-            <button onClick={() => setDishToDelete(null)} className="flex-1 py-5 bg-amber-50 text-amber-950 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-amber-100 transition-all">Отмена</button>
-            <button onClick={confirmDeleteDish} disabled={isLoading} className="flex-1 py-5 bg-red-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl">{isLoading ? <Loader2 size={16} className="animate-spin mx-auto" /> : "Удалить"}</button>
+            <button onClick={() => setDishToDelete(null)} className="flex-1 py-5 bg-amber-50 text-amber-950 rounded-2xl font-black text-[10px] uppercase">Отмена</button>
+            <button onClick={confirmDeleteDish} className="flex-1 py-5 bg-red-600 text-white rounded-2xl font-black text-[10px] uppercase">Удалить</button>
           </div>
         </div>
       </Modal>

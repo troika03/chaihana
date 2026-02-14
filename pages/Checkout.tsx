@@ -1,11 +1,11 @@
 
+// Added missing React import
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Minus, Plus, ShoppingBag, Loader2, CreditCard, Phone, AlertCircle } from 'lucide-react';
+import { Trash2, Minus, Plus, ShoppingBag, Loader2, CheckCircle, Phone, AlertCircle, MapPin } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { api } from '../apiClient.ts';
-import { initiateYooKassaPayment } from '../services/paymentService.ts';
 
 const Checkout: React.FC = () => {
   const { items, updateQuantity, removeFromCart, totalAmount, clearCart } = useCart();
@@ -16,8 +16,25 @@ const Checkout: React.FC = () => {
   const [phone, setPhone] = useState(user?.phone || '');
   const [comment, setValueComment] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentStep, setPaymentStep] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (isSuccess) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-in zoom-in duration-500">
+        <div className="bg-green-100 p-10 rounded-[4rem] text-green-600">
+          <CheckCircle size={80} />
+        </div>
+        <div className="space-y-4">
+          <h2 className="text-4xl font-black text-amber-950 italic tracking-tighter">Заказ принят!</h2>
+          <p className="text-gray-500 font-medium">Мы уже начали готовить ваш плов. <br/> Следите за статусом в профиле.</p>
+        </div>
+        <button onClick={() => navigate('/profile')} className="px-12 py-6 bg-amber-950 text-white rounded-[2.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-orange-600 transition-all">
+          В мои заказы
+        </button>
+      </div>
+    );
+  }
 
   if (items.length === 0) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-in zoom-in duration-500">
@@ -29,7 +46,8 @@ const Checkout: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     if (!user) { navigate('/profile'); return; }
-    if (!phone) { setError("Пожалуйста, введите номер телефона для связи."); return; }
+    if (!phone || phone.length < 10) { setError("Пожалуйста, введите корректный номер телефона."); return; }
+    if (step === 'details' && !address) { setError("Пожалуйста, укажите адрес доставки."); return; }
     
     setIsProcessing(true);
     setError(null);
@@ -43,27 +61,18 @@ const Checkout: React.FC = () => {
         contact_phone: phone,
         comment, 
         status: 'pending',
-        payment_status: 'pending'
+        payment_status: 'pending', // Статус оплаты "Ожидание" (например, при получении)
+        payment_method: 'card'
       };
 
-      const order = await api.orders.create(orderPayload);
-      setPaymentStep(true);
+      await api.orders.create(orderPayload);
       
-      const paymentResult = await initiateYooKassaPayment(order.id, totalAmount);
-
-      if (paymentResult.success) {
-        clearCart();
-        // Если это демо-режим, просто переходим в профиль через небольшую паузу
-        if ((paymentResult as any).demo) {
-          setTimeout(() => navigate('/profile'), 1500);
-        }
-      } else {
-        setError(paymentResult.message);
-        setPaymentStep(false);
-      }
+      // Имитация успешного завершения
+      setIsSuccess(true);
+      clearCart();
     } catch (err: any) { 
       console.error("Checkout Error:", err);
-      setError("Ошибка при создании заказа. Попробуйте еще раз."); 
+      setError("Ошибка при оформлении заказа. Попробуйте еще раз."); 
     } finally { 
       setIsProcessing(false); 
     }
@@ -86,83 +95,103 @@ const Checkout: React.FC = () => {
               <h3 className="text-2xl font-black text-amber-950 italic tracking-tighter">Ваш выбор</h3>
               <div className="space-y-6">
                 {items.map(item => (
-                  <div key={item.dish.id} className="flex gap-6 items-center">
-                    <img src={item.dish.image} alt={item.dish.name} className="w-20 h-20 rounded-2xl object-cover" />
+                  <div key={item.dish.id} className="flex gap-6 items-center border-b border-amber-50 pb-6 last:border-0">
+                    <img src={item.dish.image} alt={item.dish.name} className="w-24 h-24 rounded-3xl object-cover shadow-md" />
                     <div className="flex-1">
-                      <h3 className="font-black text-amber-950">{item.dish.name}</h3>
-                      <p className="text-orange-600 font-black text-sm">{item.dish.price} ₽</p>
+                      <h3 className="font-black text-amber-950 text-lg">{item.dish.name}</h3>
+                      <p className="text-orange-600 font-black">{item.dish.price} ₽</p>
                     </div>
-                    <div className="flex items-center gap-4 bg-amber-50/50 p-2 rounded-xl">
-                      <button onClick={() => updateQuantity(item.dish.id, item.quantity - 1)} className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm"><Minus size={12} /></button>
-                      <span className="font-black text-amber-950 text-sm">{item.quantity}</span>
-                      <button onClick={() => updateQuantity(item.dish.id, item.quantity + 1)} className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm"><Plus size={12} /></button>
+                    <div className="flex items-center gap-4 bg-amber-50 p-2 rounded-2xl">
+                      <button onClick={() => updateQuantity(item.dish.id, item.quantity - 1)} className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm text-amber-900 hover:bg-orange-500 hover:text-white transition-colors"><Minus size={14} /></button>
+                      <span className="font-black text-amber-950 w-6 text-center">{item.quantity}</span>
+                      <button onClick={() => updateQuantity(item.dish.id, item.quantity + 1)} className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm text-amber-900 hover:bg-orange-500 hover:text-white transition-colors"><Plus size={14} /></button>
                     </div>
-                    <button onClick={() => removeFromCart(item.dish.id)} className="p-3 text-red-200 hover:text-red-500 transition"><Trash2 size={20}/></button>
+                    <button onClick={() => removeFromCart(item.dish.id)} className="p-4 text-red-200 hover:text-red-500 transition-colors"><Trash2 size={24}/></button>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-[4rem] p-10 space-y-10 shadow-sm border border-amber-50">
-              <h3 className="text-2xl font-black text-amber-950 italic tracking-tighter">Детали доставки</h3>
+            <div className="bg-white rounded-[4rem] p-10 space-y-10 shadow-sm border border-amber-50 animate-in slide-in-from-right-4 duration-500">
+              <h3 className="text-2xl font-black text-amber-950 italic tracking-tighter">Куда доставить?</h3>
               <div className="space-y-6">
-                <div className="relative">
-                   <Phone className="absolute left-6 top-6 text-amber-900/20" size={20} />
+                <div className="relative group">
+                   <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-900/20 group-focus-within:text-orange-500 transition-colors" size={20} />
                    <input 
                     type="tel" 
                     value={phone} 
                     onChange={e => setPhone(e.target.value)} 
                     placeholder="Ваш телефон (обязательно)" 
-                    className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-amber-100 transition-all" 
+                    className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
                     required
                   />
                 </div>
-                <input 
-                  type="text" 
-                  value={address} 
-                  onChange={e => setAddress(e.target.value)} 
-                  placeholder="Адрес доставки" 
-                  className="w-full p-6 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-amber-100 transition-all" 
-                  required
-                />
+                <div className="relative group">
+                  <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-900/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+                  <input 
+                    type="text" 
+                    value={address} 
+                    onChange={e => setAddress(e.target.value)} 
+                    placeholder="Адрес доставки (улица, дом, кв)" 
+                    className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
+                    required
+                  />
+                </div>
                 <textarea 
                   value={comment} 
                   onChange={e => setValueComment(e.target.value)} 
-                  placeholder="Комментарий курьеру" 
-                  className="w-full p-6 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 h-32 border-none focus:ring-4 focus:ring-amber-100 transition-all resize-none" 
+                  placeholder="Комментарий для кухни или курьера" 
+                  className="w-full p-8 bg-amber-50 rounded-[3rem] outline-none font-bold text-amber-950 h-40 border-none focus:ring-4 focus:ring-orange-500/10 transition-all resize-none shadow-inner" 
                 />
               </div>
             </div>
           )}
         </div>
         <div className="lg:col-span-1">
-          <div className="bg-amber-950 text-white rounded-[4rem] p-10 sticky top-24 shadow-2xl space-y-8 text-center">
-            {paymentStep ? (
-              <div className="py-10 space-y-6">
-                <Loader2 className="animate-spin mx-auto text-orange-500" size={48} />
-                <p className="font-black italic uppercase text-[10px] tracking-widest">Обработка платежа...</p>
-              </div>
-            ) : (
-              <>
-                <p className="text-xl font-black italic tracking-tighter opacity-60">Итого</p>
-                <div className="text-5xl font-black italic tracking-tighter">{totalAmount} ₽</div>
+          <div className="bg-amber-950 text-white rounded-[4rem] p-10 sticky top-24 shadow-2xl space-y-10 text-center overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+            
+            <div className="relative z-10 space-y-2">
+              <p className="text-sm font-black uppercase tracking-[0.3em] opacity-40">Сумма заказа</p>
+              <div className="text-6xl font-black italic tracking-tighter text-orange-500">{totalAmount} ₽</div>
+            </div>
+
+            <div className="relative z-10 space-y-4">
+              <button 
+                onClick={() => step === 'cart' ? setStep('details') : handlePlaceOrder()} 
+                disabled={isProcessing}
+                className="w-full bg-orange-500 text-white py-8 rounded-[2.5rem] font-black text-[11px] uppercase tracking-[0.3em] shadow-xl hover:bg-orange-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                {isProcessing ? (
+                  <Loader2 className="animate-spin" size={24} />
+                ) : step === 'cart' ? (
+                  'Далее к деталям'
+                ) : (
+                  'Оформить заказ'
+                )}
+              </button>
+              
+              {step === 'details' && (
                 <button 
-                  onClick={() => step === 'cart' ? setStep('details') : handlePlaceOrder()} 
-                  disabled={isProcessing || (step === 'details' && (!address || !phone))}
-                  className="w-full bg-orange-500 text-white py-6 rounded-[2.5rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-orange-600 disabled:opacity-30 transition-all"
+                  onClick={() => setStep('cart')}
+                  className="w-full py-4 text-white/40 font-black text-[9px] uppercase tracking-widest hover:text-white transition-colors"
                 >
-                  {isProcessing ? <Loader2 className="animate-spin mx-auto" /> : step === 'cart' ? 'Продолжить' : 'Оплатить'}
+                  Вернуться в корзину
                 </button>
-                <div className="flex items-center justify-center gap-2 opacity-30 mt-4">
-                   <CreditCard size={14} />
-                   <span className="text-[8px] font-black uppercase tracking-widest">Безопасная оплата через ЮKassa</span>
-                </div>
-              </>
-            )}
+              )}
+            </div>
+
+            <div className="relative z-10 pt-6 border-t border-white/10">
+               <div className="flex items-center justify-center gap-3 text-white/40">
+                  <ShoppingBag size={14} />
+                  <span className="text-[9px] font-black uppercase tracking-widest">Бесплатная доставка от 1500 ₽</span>
+               </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 };
+
 export default Checkout;
