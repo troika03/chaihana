@@ -1,16 +1,16 @@
 
 import { supabase } from './supabaseClient';
-import { Dish, Order, UserProfile, SupportMessage } from './pages/types';
+import { Dish, Order, UserProfile } from './pages/types';
 
 const INITIAL_DISHES: Dish[] = [
-  { id: 1, name: 'Плов Чайханский', category: 'main', price: 450, image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800', description: 'Классический ферганский плов с нежной бараниной, желтой морковью и специями.', available: true },
-  { id: 2, name: 'Лагман Уйгурский', category: 'soups', price: 380, image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=800', description: 'Традиционный суп с тянутой вручную лапшой, говядиной и овощами.', available: true },
-  { id: 3, name: 'Манты с говядиной', category: 'main', price: 420, image: 'https://images.unsplash.com/photo-1534422298391-e4f8c170db76?w=800', description: 'Сочные манты на пару, приготовленные по старинному рецепту.', available: true },
+  { id: 1, name: 'Плов Чайханский', category: 'main', price: 450, image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800', description: 'Классический ферганский плов with нежной бараниной, желтой морковью и специями.', available: true },
+  { id: 2, name: 'Лагман Уйгурский', category: 'soups', price: 380, image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=800', description: 'Традиционный суп with тянутой вручную лапшой, говядиной и овощами.', available: true },
+  { id: 3, name: 'Манты with говядиной', category: 'main', price: 420, image: 'https://images.unsplash.com/photo-1534422298391-e4f8c170db76?w=800', description: 'Сочные манты на пару, приготовленные по старинному рецепту.', available: true },
   { id: 4, name: 'Салат Ачу-Чучук', category: 'salads', price: 290, image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800', description: 'Острый салат из тонко нарезанных томатов, лука и чили.', available: true },
-  { id: 5, name: 'Шурпа', category: 'soups', price: 350, image: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=800', description: 'Наваристый мясной бульон с крупными кусками мяса и овощей.', available: true },
-  { id: 6, name: 'Пахлава Медовая', category: 'desserts', price: 250, image: 'https://images.unsplash.com/photo-1519197924294-4ba991a11128?w=800', description: 'Традиционная сладость с грецким орехом и натуральным медом.', available: true },
+  { id: 5, name: 'Шурпа', category: 'soups', price: 350, image: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=800', description: 'Наваристый мясной бульон with крупными кусками мяса и овощей.', available: true },
+  { id: 6, name: 'Пахлава Медовая', category: 'desserts', price: 250, image: 'https://images.unsplash.com/photo-1519197924294-4ba991a11128?w=800', description: 'Традиционная сладость with грецким орехом и натуральным медом.', available: true },
   { id: 7, name: 'Шашлык из баранины', category: 'main', price: 550, image: 'https://images.unsplash.com/photo-1529692236671-f1f6e994a52c?w=800', description: 'Нежная корейка ягненка, маринованная в восточных специях.', available: true },
-  { id: 8, name: 'Зеленый чай с лотосом', category: 'drinks', price: 150, image: 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?w=800', description: 'Освежающий чай в пиалах.', available: true },
+  { id: 8, name: 'Зеленый чай with лотосом', category: 'drinks', price: 150, image: 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?w=800', description: 'Освежающий чай в пиалах.', available: true },
 ];
 
 const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
@@ -23,13 +23,42 @@ const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Pr
 const isConfigured = () => {
   try {
     const url = (supabase as any).supabaseUrl;
-    return url && !url.includes('YOUR_PROJECT_ID');
+    return url && !url.includes('cnfhqdovshjnflfycfti.supabase.co') && !url.includes('YOUR_PROJECT_ID');
   } catch {
     return false;
   }
 };
 
 export const api = {
+  storage: {
+    uploadDishImage: async (file: File): Promise<string> => {
+      if (!isConfigured()) {
+        // В демо-режиме возвращаем base64 или временную ссылку
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `dish_images/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('dishes')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('dishes')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+    }
+  },
+
   dishes: {
     getAll: async (): Promise<Dish[]> => {
       if (!isConfigured()) return INITIAL_DISHES;
@@ -166,27 +195,6 @@ export const api = {
     },
     updateStatus: async (id: number, status: Order['status']) => {
       await supabase.from('orders').update({ status }).eq('id', id);
-    }
-  },
-
-  support: {
-    send: async (msg: Partial<SupportMessage>) => {
-      if (!isConfigured()) {
-        console.log("Mock support message sent:", msg);
-        return { ...msg, id: Date.now(), created_at: new Date().toISOString(), status: 'new' };
-      }
-      const { data, error } = await supabase.from('support_messages').insert([msg]).select().single();
-      if (error) throw error;
-      return data;
-    },
-    getAll: async () => {
-      if (!isConfigured()) return [];
-      const { data } = await supabase.from('support_messages').select('*').order('created_at', { ascending: false });
-      return data || [];
-    },
-    updateStatus: async (id: number, status: 'new' | 'read') => {
-      if (!isConfigured()) return;
-      await supabase.from('support_messages').update({ status }).eq('id', id);
     }
   }
 };

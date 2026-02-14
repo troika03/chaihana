@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Loader2, Sparkles, MapPin, Clock, RefreshCw, Slash } from 'lucide-react';
+import { Search, Plus, Loader2, Sparkles, MapPin, Clock, RefreshCw, Slash, ChevronRight } from 'lucide-react';
 import { api } from '../apiClient.ts';
 import { supabase } from '../supabaseClient.ts';
 import { Dish } from './types.ts';
@@ -129,15 +129,49 @@ const Home: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6 justify-between items-center sticky top-24 bg-[#f9f3e9]/80 backdrop-blur-2xl p-6 z-30 rounded-[3rem] border border-white shadow-xl">
-        <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 no-scrollbar">
-          {CATEGORIES.map(c => (
-            <button key={c.id} onClick={() => setActiveCategory(c.id)} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeCategory === c.id ? 'bg-amber-950 text-white shadow-lg scale-105' : 'bg-white text-amber-900/40 hover:bg-amber-50'}`}>{c.label}</button>
-          ))}
-        </div>
-        <div className="relative w-full md:w-80 group">
-          <input type="text" placeholder="Поиск блюд..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-14 pr-8 py-4 rounded-[2rem] bg-white text-sm font-bold border-none outline-none focus:ring-4 focus:ring-orange-500/10 transition-all"/>
-          <Search className="absolute left-5 top-4 text-amber-900/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+      {/* Sticky Header with Categories and Search */}
+      <div className="sticky top-24 z-30 space-y-4">
+        <div className="bg-[#f9f3e9]/80 backdrop-blur-2xl p-4 md:p-6 rounded-[3rem] border border-white shadow-xl flex flex-col md:flex-row gap-4 items-center overflow-hidden">
+          
+          {/* Categories Container with horizontal scroll and fade effect */}
+          <div className="relative w-full md:flex-1 overflow-hidden">
+            {/* Left fade indicator */}
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#f9f3e9] to-transparent z-10 pointer-events-none md:hidden"></div>
+            
+            <div className="flex gap-3 overflow-x-auto no-scrollbar py-2 px-4 md:px-0 flex-nowrap scroll-smooth">
+              {CATEGORIES.map(c => (
+                <button 
+                  key={c.id} 
+                  onClick={() => setActiveCategory(c.id)} 
+                  className={`
+                    whitespace-nowrap px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all duration-300
+                    ${activeCategory === c.id 
+                      ? 'bg-amber-950 text-white shadow-lg scale-105' 
+                      : 'bg-white text-amber-900/40 hover:bg-amber-50 hover:text-amber-950 shadow-sm'
+                    }
+                  `}
+                >
+                  {c.label}
+                </button>
+              ))}
+              {/* Spacer for scroll padding */}
+              <div className="min-w-[16px] md:hidden"></div>
+            </div>
+            
+            {/* Right fade indicator */}
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#f9f3e9] to-transparent z-10 pointer-events-none md:hidden"></div>
+          </div>
+
+          <div className="relative w-full md:w-72 group">
+            <input 
+              type="text" 
+              placeholder="Поиск блюд..." 
+              value={searchQuery} 
+              onChange={e => setSearchQuery(e.target.value)} 
+              className="w-full pl-14 pr-8 py-4 rounded-[2rem] bg-white text-sm font-bold border-none outline-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-sm"
+            />
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-amber-900/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+          </div>
         </div>
       </div>
 

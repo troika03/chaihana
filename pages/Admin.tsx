@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../apiClient';
-import { Order, Dish, SupportMessage } from './types';
+import { Order, Dish } from './types';
 import { 
   Package, 
   RefreshCw, 
@@ -28,7 +28,8 @@ import {
   MessageSquare,
   ChevronRight,
   Search,
-  MessageCircle
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { supabase } from '../supabaseClient';
@@ -36,11 +37,11 @@ import Modal from '../components/ui/Modal.tsx';
 
 const Admin: React.FC = () => {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'stats' | 'orders' | 'history' | 'menu' | 'support'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'orders' | 'history' | 'menu'>('stats');
   const [orders, setOrders] = useState<Order[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
-  const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [soundEnabled, setSoundEnabled] = useState(false);
@@ -49,18 +50,17 @@ const Admin: React.FC = () => {
   const [editingDish, setEditingDish] = useState<Partial<Dish> | null>(null);
   const [isDishModalOpen, setIsDishModalOpen] = useState(false);
   const [dishToDelete, setDishToDelete] = useState<Dish | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [allOrders, allDishes, allMessages] = await Promise.all([
+      const [allOrders, allDishes] = await Promise.all([
         api.orders.getAll(),
-        api.dishes.getAll(),
-        api.support.getAll()
+        api.dishes.getAll()
       ]);
       setOrders(allOrders);
       setDishes(allDishes);
-      setSupportMessages(allMessages);
     } catch (err) {
       console.error("Failed to load admin data", err);
     } finally {
@@ -72,30 +72,19 @@ const Admin: React.FC = () => {
     if (isAdmin) {
       loadData();
       
-      const ordersChannel = supabase
+      const channel = supabase
         .channel('admin_realtime_sync')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
           setOrders(prev => [payload.new as Order, ...prev]);
-          if (soundEnabled && audioRef.current) {
-            audioRef.current.play().catch(() => {});
-          }
+          if (soundEnabled && audioRef.current) audioRef.current.play().catch(() => {});
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
           setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new as Order : o));
         })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, (payload) => {
-          setSupportMessages(prev => [payload.new as SupportMessage, ...prev]);
-          if (soundEnabled && audioRef.current) {
-            audioRef.current.play().catch(() => {});
-          }
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages' }, (payload) => {
-          setSupportMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new as SupportMessage : m));
-        })
         .subscribe();
 
       return () => {
-        supabase.removeChannel(ordersChannel);
+        supabase.removeChannel(channel);
       };
     }
   }, [isAdmin, soundEnabled]);
@@ -112,8 +101,6 @@ const Admin: React.FC = () => {
     };
 
     const todayOrders = orders.filter(o => o.created_at.startsWith(todayStr));
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const weekOrders = orders.filter(o => new Date(o.created_at) >= weekAgo);
     const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const monthOrders = orders.filter(o => new Date(o.created_at) >= monthAgo);
 
@@ -121,14 +108,12 @@ const Admin: React.FC = () => {
 
     return {
       today: getStatsForPeriod(todayOrders),
-      week: getStatsForPeriod(weekOrders),
       month: getStatsForPeriod(monthOrders),
       selected: getStatsForPeriod(filteredByDateOrders),
       selectedOrders: filteredByDateOrders,
-      pendingCount: orders.filter(o => !['delivered', 'cancelled'].includes(o.status)).length,
-      newMessages: supportMessages.filter(m => m.status === 'new').length
+      pendingCount: orders.filter(o => !['delivered', 'cancelled'].includes(o.status)).length
     };
-  }, [orders, selectedDate, supportMessages]);
+  }, [orders, selectedDate]);
 
   const activeOrders = useMemo(() => {
     return orders.filter(o => !['delivered', 'cancelled'].includes(o.status));
@@ -154,6 +139,21 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const imageUrl = await api.storage.uploadDishImage(file);
+      setEditingDish(prev => ({ ...prev, image: imageUrl }));
+    } catch (err: any) {
+      alert("Ошибка при загрузке фото: " + err.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const confirmDeleteDish = async () => {
     if (!dishToDelete) return;
     setIsLoading(true);
@@ -165,15 +165,6 @@ const Admin: React.FC = () => {
       alert("Ошибка при удалении блюда.");
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const markMessageAsRead = async (id: number) => {
-    try {
-      await api.support.updateStatus(id, 'read');
-      setSupportMessages(prev => prev.map(m => m.id === id ? { ...m, status: 'read' } : m));
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -193,7 +184,7 @@ const Admin: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-4xl font-black text-amber-950 uppercase italic tracking-tighter flex items-center gap-3">
-            Чайхана Управление <BellRing className={(stats.pendingCount > 0 || stats.newMessages > 0) ? "text-orange-500 animate-bounce" : "text-amber-200"} />
+            Чайхана Управление <BellRing className={stats.pendingCount > 0 ? "text-orange-500 animate-bounce" : "text-amber-200"} />
           </h1>
           <p className="text-amber-800/40 font-bold text-[11px] uppercase tracking-[0.3em] mt-2">Панель ресторатора Чайхана Жулебино</p>
         </div>
@@ -219,7 +210,7 @@ const Admin: React.FC = () => {
           { label: 'Выручка за сегодня', val: `${stats.today.revenue.toLocaleString()} ₽`, sub: `Ср. чек: ${stats.today.avgCheck} ₽`, icon: <TrendingUp size={20}/>, color: 'text-orange-600', bg: 'bg-orange-50' },
           { label: 'Выручка за месяц', val: `${stats.month.revenue.toLocaleString()} ₽`, sub: `Всего: ${stats.month.count} зак.`, icon: <BarChart3 size={20}/>, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Заказов сегодня', val: stats.today.count, sub: `${stats.today.successfulCount} доставлено`, icon: <Package size={20}/>, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'В работе', val: stats.pendingCount, sub: `${stats.newMessages} сообщ. поддержки`, icon: <MessageCircle size={20}/>, color: 'text-amber-600', bg: 'bg-amber-50' },
+          { label: 'В работе', val: stats.pendingCount, sub: 'Ожидают действий', icon: <Clock size={20}/>, color: 'text-amber-600', bg: 'bg-amber-50' },
         ].map((s, i) => (
           <div key={i} className="bg-white p-8 rounded-[3rem] border border-amber-50 shadow-sm group hover:shadow-xl transition-all relative overflow-hidden">
              <div className="relative z-10">
@@ -240,8 +231,7 @@ const Admin: React.FC = () => {
           { id: 'stats', label: 'Статистика дня' },
           { id: 'orders', label: `Очередь (${activeOrders.length})` },
           { id: 'history', label: 'Все заказы' },
-          { id: 'menu', label: 'Меню блюд' },
-          { id: 'support', label: `Поддержка ${stats.newMessages > 0 ? `(${stats.newMessages})` : ''}` }
+          { id: 'menu', label: 'Меню блюд' }
         ].map(t => (
           <button 
             key={t.id} 
@@ -282,12 +272,12 @@ const Admin: React.FC = () => {
 
            {/* Detailed Orders for Period List */}
            <div className="lg:col-span-2 bg-white p-10 rounded-[4rem] border border-amber-50 shadow-sm flex flex-col">
-              <h3 className="text-xl font-black text-amber-950 italic tracking-tight mb-8">Детализированные заказы ({stats.selectedOrders.length})</h3>
+              <h3 className="text-xl font-black text-amber-950 italic tracking-tight mb-8">Заказы за период ({stats.selectedOrders.length})</h3>
               <div className="space-y-6 flex-1 overflow-y-auto max-h-[700px] pr-4 no-scrollbar">
                 {stats.selectedOrders.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 opacity-20">
                     <History size={48} />
-                    <p className="font-black uppercase text-xs tracking-widest">Нет заказов за этот день</p>
+                    <p className="font-black uppercase text-xs tracking-widest">Нет заказов</p>
                   </div>
                 ) : (
                   stats.selectedOrders.map(o => (
@@ -315,7 +305,6 @@ const Admin: React.FC = () => {
                              </div>
                           </div>
                        </div>
-
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-[11px]">
                           <div className="space-y-3">
                              <p className="font-black uppercase tracking-widest text-amber-900/40 text-[9px] flex items-center gap-2"><Package size={12}/> Состав заказа:</p>
@@ -329,7 +318,7 @@ const Admin: React.FC = () => {
                              </div>
                           </div>
                           <div className="space-y-3">
-                             <p className="font-black uppercase tracking-widest text-amber-900/40 text-[9px] flex items-center gap-2"><MapPin size={12}/> Адрес & Комментарий:</p>
+                             <p className="font-black uppercase tracking-widest text-amber-900/40 text-[9px] flex items-center gap-2"><MapPin size={12}/> Адрес:</p>
                              <div className="space-y-2">
                                 <p className="font-bold text-amber-950 leading-tight">{o.delivery_address || 'Самовывоз'}</p>
                                 {o.comment && (
@@ -412,55 +401,6 @@ const Admin: React.FC = () => {
         </div>
       )}
 
-      {/* Tab: Support Messages */}
-      {activeTab === 'support' && (
-        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-           <div className="bg-white p-10 rounded-[3rem] border border-amber-50 shadow-sm flex justify-between items-center">
-              <h3 className="font-black text-2xl italic tracking-tight text-amber-950 flex items-center gap-3">
-                 <MessageCircle size={24} className="text-orange-500" /> Сообщения поддержки
-              </h3>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                {stats.newMessages} новых сообщений
-              </p>
-           </div>
-           
-           <div className="grid gap-6">
-              {supportMessages.length === 0 ? (
-                <div className="bg-white p-20 rounded-[3rem] text-center text-amber-900/20 font-black uppercase text-xs tracking-widest">
-                   Сообщений пока нет
-                </div>
-              ) : (
-                supportMessages.map(msg => (
-                  <div key={msg.id} className={`bg-white p-8 rounded-[3rem] border shadow-sm transition-all hover:shadow-md ${msg.status === 'new' ? 'border-orange-500/30 bg-orange-50/10' : 'border-amber-50'}`}>
-                    <div className="flex justify-between items-start mb-4">
-                       <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black ${msg.status === 'new' ? 'bg-orange-500 text-white' : 'bg-amber-100 text-amber-900'}`}>
-                             {msg.user_name.charAt(0)}
-                          </div>
-                          <div>
-                             <p className="font-black text-amber-950">{msg.user_name}</p>
-                             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{new Date(msg.created_at).toLocaleString()}</p>
-                          </div>
-                       </div>
-                       {msg.status === 'new' && (
-                          <button 
-                            onClick={() => markMessageAsRead(msg.id)}
-                            className="text-[9px] font-black uppercase tracking-widest bg-orange-100 text-orange-600 px-4 py-2 rounded-xl hover:bg-orange-200 transition-colors"
-                          >
-                            Отметить как прочитано
-                          </button>
-                       )}
-                    </div>
-                    <div className="bg-amber-50/50 p-6 rounded-[2rem] text-sm text-amber-950 font-medium italic">
-                      "{msg.message}"
-                    </div>
-                  </div>
-                ))
-              )}
-           </div>
-        </div>
-      )}
-
       {/* Tab: Menu Management */}
       {activeTab === 'menu' && (
         <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
@@ -485,23 +425,12 @@ const Admin: React.FC = () => {
                 </div>
                 <h4 className="font-black text-amber-950 text-lg truncate mb-1">{dish.name}</h4>
                 <p className="text-orange-500 font-black text-md mb-6">{dish.price} ₽</p>
-                
                 <div className="flex gap-2">
-                  <button 
-                    onClick={async () => {
-                      await api.dishes.update(dish.id, { available: !dish.available });
-                      loadData();
-                    }}
-                    className={`flex-1 py-4 rounded-2xl transition-all flex items-center justify-center ${dish.available ? 'bg-amber-50 text-amber-950 hover:bg-orange-500 hover:text-white' : 'bg-green-500 text-white'}`}
-                  >
+                  <button onClick={async () => { await api.dishes.update(dish.id, { available: !dish.available }); loadData(); }} className={`flex-1 py-4 rounded-2xl transition-all flex items-center justify-center ${dish.available ? 'bg-amber-50 text-amber-950 hover:bg-orange-500 hover:text-white' : 'bg-green-500 text-white'}`}>
                     {dish.available ? <Eye size={18} /> : <EyeOff size={18} />}
                   </button>
-                  <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="flex-1 py-4 bg-amber-50 text-amber-900 rounded-2xl hover:bg-amber-950 hover:text-white transition-all flex items-center justify-center">
-                    <Edit3 size={18} />
-                  </button>
-                  <button onClick={() => setDishToDelete(dish)} className="flex-1 py-4 bg-red-50 text-red-600 rounded-2xl hover:bg-red-600 hover:text-white transition-all flex items-center justify-center">
-                    <Trash2 size={18} />
-                  </button>
+                  <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="flex-1 py-4 bg-amber-50 text-amber-900 rounded-2xl hover:bg-amber-950 hover:text-white transition-all flex items-center justify-center"><Edit3 size={18} /></button>
+                  <button onClick={() => setDishToDelete(dish)} className="flex-1 py-4 bg-red-50 text-red-600 rounded-2xl hover:bg-red-600 hover:text-white transition-all flex items-center justify-center"><Trash2 size={18} /></button>
                 </div>
               </div>
             ))}
@@ -509,41 +438,87 @@ const Admin: React.FC = () => {
         </div>
       )}
 
-      {/* Dish Add/Edit Modal */}
-      <Modal 
-        isOpen={isDishModalOpen} 
-        onClose={() => setIsDishModalOpen(false)} 
-        title={editingDish?.id ? "Изменить позицию" : "Новое блюдо"}
-      >
+      {/* Dish Modal */}
+      <Modal isOpen={isDishModalOpen} onClose={() => setIsDishModalOpen(false)} title={editingDish?.id ? "Изменить позицию" : "Новое блюдо"}>
         <form onSubmit={handleSaveDish} className="space-y-6">
           <div className="grid grid-cols-1 gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Название</label>
               <input required type="text" className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none focus:ring-4 focus:ring-amber-100" value={editingDish?.name || ''} onChange={e => setEditingDish(prev => ({ ...prev, name: e.target.value }))} />
             </div>
+            
             <div className="grid grid-cols-2 gap-6">
                <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Цена (₽)</label>
-                <input required type="number" className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none focus:ring-4 focus:ring-amber-100" value={editingDish?.price || 0} onChange={e => setEditingDish(prev => ({ ...prev, price: parseInt(e.target.value) }))} />
+                 <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Цена (₽)</label>
+                 <input required type="number" className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none focus:ring-4 focus:ring-amber-100" value={editingDish?.price || 0} onChange={e => setEditingDish(prev => ({ ...prev, price: parseInt(e.target.value) }))} />
                </div>
                <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Категория</label>
-                <select className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none appearance-none" value={editingDish?.category || 'main'} onChange={e => setEditingDish(prev => ({ ...prev, category: e.target.value as any }))}>
-                  <option value="main">Основные</option><option value="soups">Супы</option><option value="salads">Салаты</option><option value="desserts">Десерты</option><option value="drinks">Напитки</option>
-                </select>
+                 <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Категория</label>
+                 <select className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none appearance-none" value={editingDish?.category || 'main'} onChange={e => setEditingDish(prev => ({ ...prev, category: e.target.value as any }))}>
+                   <option value="main">Основные</option>
+                   <option value="soups">Супы</option>
+                   <option value="salads">Салаты</option>
+                   <option value="desserts">Десерты</option>
+                   <option value="drinks">Напитки</option>
+                 </select>
                </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Ссылка на фото</label>
-              <input required type="text" className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none" value={editingDish?.image || ''} onChange={e => setEditingDish(prev => ({ ...prev, image: e.target.value }))} />
+
+            <div className="space-y-4">
+              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4 block">Фотография блюда</label>
+              <div className="flex flex-col items-center gap-4">
+                {editingDish?.image ? (
+                  <div className="relative group w-full">
+                    <img src={editingDish.image} alt="Preview" className="w-full h-48 object-cover rounded-[2rem] border-2 border-amber-100" />
+                    <button 
+                      type="button" 
+                      onClick={() => setEditingDish(prev => ({ ...prev, image: '' }))}
+                      className="absolute top-4 right-4 bg-red-600 text-white p-2 rounded-full shadow-lg hover:bg-red-700 transition"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    type="button" 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="w-full h-48 border-4 border-dashed border-amber-100 rounded-[2rem] flex flex-col items-center justify-center text-amber-900/40 hover:bg-amber-50 transition gap-4"
+                  >
+                    {isUploading ? <Loader2 size={32} className="animate-spin text-orange-500" /> : <Upload size={32} />}
+                    <span className="text-[10px] font-black uppercase tracking-widest">{isUploading ? 'Загрузка...' : 'Загрузить фото с устройства'}</span>
+                  </button>
+                )}
+                
+                <input 
+                  ref={fileInputRef}
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageUpload} 
+                  className="hidden" 
+                />
+                
+                <div className="w-full text-center">
+                   <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Или вставьте ссылку вручную:</p>
+                   <input 
+                     type="text" 
+                     className="w-full mt-2 p-4 bg-amber-50 rounded-xl font-bold text-amber-950 border-none outline-none text-[11px]" 
+                     placeholder="https://example.com/image.jpg"
+                     value={editingDish?.image || ''} 
+                     onChange={e => setEditingDish(prev => ({ ...prev, image: e.target.value }))} 
+                   />
+                </div>
+              </div>
             </div>
+
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4">Описание</label>
               <textarea required rows={3} className="w-full p-6 bg-amber-50 rounded-[2rem] font-bold text-amber-950 border-none outline-none resize-none" value={editingDish?.description || ''} onChange={e => setEditingDish(prev => ({ ...prev, description: e.target.value }))} />
             </div>
           </div>
-          <button disabled={isLoading} className="w-full bg-amber-950 text-white py-8 rounded-[2.5rem] font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-orange-600 transition-all flex items-center justify-center gap-4">
-            {isLoading ? <Loader2 size={24} className="animate-spin" /> : "Сохранить"}
+          
+          <button disabled={isLoading || isUploading} className="w-full bg-amber-950 text-white py-8 rounded-[2.5rem] font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-orange-600 transition-all flex items-center justify-center gap-4">
+            {isLoading ? <Loader2 size={24} className="animate-spin" /> : "Сохранить позицию"}
           </button>
         </form>
       </Modal>
@@ -555,9 +530,7 @@ const Admin: React.FC = () => {
           <div><p className="text-amber-950 font-black text-xl mb-2">Удалить «{dishToDelete?.name}»?</p><p className="text-gray-400 text-sm font-medium">Это действие безвозвратно удалит позицию из меню.</p></div>
           <div className="flex gap-4">
             <button onClick={() => setDishToDelete(null)} className="flex-1 py-5 bg-amber-50 text-amber-950 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-amber-100 transition-all">Отмена</button>
-            <button onClick={confirmDeleteDish} disabled={isLoading} className="flex-1 py-5 bg-red-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl">
-              {isLoading ? <Loader2 size={16} className="animate-spin mx-auto" /> : "Удалить"}
-            </button>
+            <button onClick={confirmDeleteDish} disabled={isLoading} className="flex-1 py-5 bg-red-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl">{isLoading ? <Loader2 size={16} className="animate-spin mx-auto" /> : "Удалить"}</button>
           </div>
         </div>
       </Modal>
