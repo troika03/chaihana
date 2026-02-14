@@ -20,7 +20,6 @@ const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Pr
   ]);
 };
 
-// Упрощенная проверка конфигурации: теперь она просто проверяет наличие URL
 const isConfigured = () => {
   try {
     const url = (supabase as any).supabaseUrl;
@@ -42,20 +41,34 @@ export const api = {
       }
 
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
+      const fileName = `${Date.now()}-${Math.floor(Math.random() * 10000)}.${fileExt}`;
       const filePath = `dish_images/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('dishes')
-        .upload(filePath, file);
+      try {
+        const { error: uploadError } = await supabase.storage
+          .from('dishes')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
 
-      if (uploadError) throw uploadError;
+        if (uploadError) {
+          // Специальная обработка ошибки RLS (Row-Level Security)
+          if (uploadError.message.includes('row-level security policy')) {
+            throw new Error('Ошибка доступа (RLS) в Supabase. Убедитесь, что для бакета "dishes" настроены политики INSERT в разделе Storage -> Policies.');
+          }
+          throw uploadError;
+        }
 
-      const { data } = supabase.storage
-        .from('dishes')
-        .getPublicUrl(filePath);
+        const { data } = supabase.storage
+          .from('dishes')
+          .getPublicUrl(filePath);
 
-      return data.publicUrl;
+        return data.publicUrl;
+      } catch (err: any) {
+        console.error("Storage upload error:", err);
+        throw err;
+      }
     }
   },
 
@@ -65,7 +78,6 @@ export const api = {
       try {
         const fetchPromise = (async () => {
           const { data, error } = await supabase.from('dishes').select('*').order('id', { ascending: true });
-          // Если в базе пусто, возвращаем начальный набор, если нет - данные из базы
           if (error) throw error;
           if (!data || data.length === 0) return INITIAL_DISHES;
           return data as Dish[];

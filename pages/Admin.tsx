@@ -151,6 +151,8 @@ const Admin: React.FC = () => {
       alert("Ошибка при загрузке фото: " + err.message);
     } finally {
       setIsUploading(false);
+      // Сбрасываем значение input, чтобы можно было загрузить тот же файл повторно
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -467,9 +469,14 @@ const Admin: React.FC = () => {
             <div className="space-y-4">
               <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-4 block">Фотография блюда</label>
               <div className="flex flex-col items-center gap-4">
-                {editingDish?.image ? (
+                {isUploading ? (
+                   <div className="w-full h-48 bg-amber-50 rounded-[2rem] flex flex-col items-center justify-center gap-4 border-2 border-amber-100 animate-pulse">
+                      <Loader2 size={32} className="animate-spin text-orange-500" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-900/40">Загрузка изображения...</span>
+                   </div>
+                ) : editingDish?.image ? (
                   <div className="relative group w-full">
-                    <img src={editingDish.image} alt="Preview" className="w-full h-48 object-cover rounded-[2rem] border-2 border-amber-100" />
+                    <img src={editingDish.image} alt="Preview" className="w-full h-48 object-cover rounded-[2rem] border-2 border-amber-100 shadow-sm" />
                     <button 
                       type="button" 
                       onClick={() => setEditingDish(prev => ({ ...prev, image: '' }))}
@@ -482,11 +489,10 @@ const Admin: React.FC = () => {
                   <button 
                     type="button" 
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
                     className="w-full h-48 border-4 border-dashed border-amber-100 rounded-[2rem] flex flex-col items-center justify-center text-amber-900/40 hover:bg-amber-50 transition gap-4"
                   >
-                    {isUploading ? <Loader2 size={32} className="animate-spin text-orange-500" /> : <Upload size={32} />}
-                    <span className="text-[10px] font-black uppercase tracking-widest">{isUploading ? 'Загрузка...' : 'Загрузить фото с устройства'}</span>
+                    <Upload size={32} />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-center px-4">Загрузить фото с устройства</span>
                   </button>
                 )}
                 
@@ -518,7 +524,7 @@ const Admin: React.FC = () => {
           </div>
           
           <button disabled={isLoading || isUploading} className="w-full bg-amber-950 text-white py-8 rounded-[2.5rem] font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-orange-600 transition-all flex items-center justify-center gap-4">
-            {isLoading ? <Loader2 size={24} className="animate-spin" /> : "Сохранить позицию"}
+            {isLoading ? <Loader2 size={24} className="animate-spin" /> : editingDish?.id ? "Сохранить изменения" : "Добавить в меню"}
           </button>
         </form>
       </Modal>
