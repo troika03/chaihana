@@ -2,12 +2,12 @@
 import { supabase } from '../supabaseClient';
 
 /**
- * Проверка, настроен ли проект Supabase (не является ли URL стандартным плейсхолдером)
+ * Проверка, настроен ли проект Supabase
  */
 const isConfigured = () => {
   try {
     const url = (supabase as any).supabaseUrl;
-    return url && !url.includes('cnfhqdovshjnflfycfti.supabase.co') && !url.includes('YOUR_PROJECT_ID');
+    return !!url && !url.includes('YOUR_PROJECT_ID');
   } catch {
     return false;
   }
@@ -17,13 +17,10 @@ const isConfigured = () => {
  * Интеграция с ЮKassa через Supabase Edge Functions.
  */
 export const initiateYooKassaPayment = async (orderId: number, amount: number) => {
-  // Демонстрационный режим, если проект не настроен полностью
+  // Демонстрационный режим теперь включается только если URL вообще не задан
   if (!isConfigured()) {
     console.log('[Payment] Demo Mode: Simulating payment process...');
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Имитируем успешный переход на страницу профиля через 2 секунды
-    // В реальном приложении здесь был бы редирект на kassa.yandex.ru
     return { 
       success: true, 
       message: 'Демо-режим: платеж успешно "создан". Перенаправляем в профиль...',
@@ -52,7 +49,7 @@ export const initiateYooKassaPayment = async (orderId: number, amount: number) =
       throw new Error(detail);
     }
 
-    // Сохраняем статус в базу данных (необязательно, если Edge Function это уже сделала)
+    // Сохраняем статус в базу данных
     await supabase
       .from('orders')
       .update({ payment_status: 'pending' })

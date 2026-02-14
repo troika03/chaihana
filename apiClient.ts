@@ -20,10 +20,11 @@ const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Pr
   ]);
 };
 
+// Упрощенная проверка конфигурации: теперь она просто проверяет наличие URL
 const isConfigured = () => {
   try {
     const url = (supabase as any).supabaseUrl;
-    return url && !url.includes('cnfhqdovshjnflfycfti.supabase.co') && !url.includes('YOUR_PROJECT_ID');
+    return !!url && !url.includes('YOUR_PROJECT_ID');
   } catch {
     return false;
   }
@@ -33,7 +34,6 @@ export const api = {
   storage: {
     uploadDishImage: async (file: File): Promise<string> => {
       if (!isConfigured()) {
-        // В демо-режиме возвращаем base64 или временную ссылку
         return new Promise((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
@@ -65,11 +65,14 @@ export const api = {
       try {
         const fetchPromise = (async () => {
           const { data, error } = await supabase.from('dishes').select('*').order('id', { ascending: true });
-          if (error || !data || data.length === 0) return INITIAL_DISHES;
+          // Если в базе пусто, возвращаем начальный набор, если нет - данные из базы
+          if (error) throw error;
+          if (!data || data.length === 0) return INITIAL_DISHES;
           return data as Dish[];
         })();
-        return await withTimeout(fetchPromise, 3000, INITIAL_DISHES);
-      } catch {
+        return await withTimeout(fetchPromise, 5000, INITIAL_DISHES);
+      } catch (err) {
+        console.error("API Error:", err);
         return INITIAL_DISHES;
       }
     },
