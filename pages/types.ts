@@ -2,10 +2,11 @@
 export interface Dish {
   id: number;
   name: string;
-  category: 'soups' | 'main' | 'salads' | 'drinks' | 'desserts';
+  category: 'soups' | 'main' | 'salads' | 'drinks' | 'desserts' | 'bakery';
   price: number;
   image: string;
   description: string;
+  ingredients?: string;
   available: boolean;
 }
 
