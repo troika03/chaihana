@@ -1,5 +1,4 @@
 
-// Fixed: Added React import to satisfy namespace requirements for React.FC and React.FormEvent
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { api } from '../apiClient.ts';
@@ -27,7 +26,6 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Отменен',
 };
 
-// Fixed: React namespace is now available after import
 const Profile: React.FC = () => {
   const { user, signIn, signUp, signOut, isLoading } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -57,28 +55,34 @@ const Profile: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user) return;
+
     loadOrders();
 
-    if (user) {
-      const channel = supabase
-        .channel(`user_orders_${user.id}`)
-        .on('postgres_changes', { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'orders',
-          filter: `user_id=eq.${user.id}`
-        }, (payload) => {
+    // Настройка Realtime подписки: слушаем создание новых заказов и обновление статусов
+    const channel = supabase
+      .channel(`user_orders_realtime_${user.id}`)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'orders',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          // Добавляем новый заказ в начало списка
+          setOrders(prev => [payload.new as Order, ...prev]);
+        } else if (payload.eventType === 'UPDATE') {
+          // Обновляем статус существующего заказа
           setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new as Order : o));
-        })
-        .subscribe();
+        }
+      })
+      .subscribe();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
-  // Fixed: React namespace is now available for FormEvent
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -106,6 +110,8 @@ const Profile: React.FC = () => {
     setIsCancelling(true);
     try {
       await api.orders.updateStatus(orderToCancel.id, 'cancelled');
+      // Статус обновится автоматически через Realtime подписку, 
+      // но для мгновенного отклика UI обновим и здесь
       setOrders(prev => prev.map(o => o.id === orderToCancel.id ? { ...o, status: 'cancelled' } : o));
       setOrderToCancel(null);
     } catch (err) {
@@ -226,7 +232,7 @@ const Profile: React.FC = () => {
         ) : (
           <div className="grid gap-4">
             {orders.map(order => (
-              <div key={order.id} className="bg-white p-8 rounded-[3rem] border border-amber-50 flex flex-col sm:flex-row justify-between items-center gap-4 hover:shadow-lg transition-shadow overflow-hidden">
+              <div key={order.id} className="bg-white p-8 rounded-[3rem] border border-amber-50 flex flex-col sm:flex-row justify-between items-center gap-4 hover:shadow-lg transition-shadow overflow-hidden animate-in slide-in-from-left-4">
                 <div className="text-center sm:text-left">
                   <h4 className="font-black text-amber-950 text-xl tracking-tight">Заказ #{order.id.toString().slice(-4)} на {order.total_amount} ₽</h4>
                   <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest flex items-center gap-2 mt-1 justify-center sm:justify-start">
@@ -243,7 +249,7 @@ const Profile: React.FC = () => {
                       <XCircle size={20} />
                     </button>
                   )}
-                  <span className={`px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest ${
+                  <span className={`px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-colors ${
                     order.status === 'delivered' ? 'bg-green-100 text-green-700' : 
                     order.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
                   }`}>

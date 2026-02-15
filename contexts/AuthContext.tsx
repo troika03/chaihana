@@ -20,27 +20,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
   const isMounted = useRef(true);
 
+  const initAuth = async () => {
+    try {
+      const profile = await api.auth.getSession();
+      if (isMounted.current) setUser(profile);
+    } catch (err) {
+      console.error("Auth init error:", err);
+    } finally {
+      if (isMounted.current) setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     isMounted.current = true;
     
-    // Предохранитель: в любом случае отключаем лоадер через 5 секунд
+    // ПРЕДОХРАНИТЕЛЬ: Если сессия не загрузилась за 2 секунды, 
+    // считаем, что связи с БД нет и снимаем экран загрузки
     const safetyTimer = setTimeout(() => {
-      if (isMounted.current) setIsLoading(false);
-    }, 5000);
-
-    const initAuth = async () => {
-      try {
-        const profile = await api.auth.getSession();
-        if (isMounted.current) {
-          setUser(profile);
-          setIsLoading(false);
-          clearTimeout(safetyTimer);
-        }
-      } catch (err) {
-        console.error("Auth init error:", err);
-        if (isMounted.current) setIsLoading(false);
+      if (isMounted.current && isLoading) {
+        console.warn("Auth safety timer triggered - forcing loading false");
+        setIsLoading(false);
       }
-    };
+    }, 2000);
 
     initAuth();
 
@@ -51,15 +52,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setIsLoading(false);
         }
       } else if (session) {
-        try {
-          const profile = await api.auth.getSession();
-          if (isMounted.current) {
-            setUser(profile);
-            setIsLoading(false);
-          }
-        } catch {
-          if (isMounted.current) setIsLoading(false);
-        }
+        initAuth();
       }
     });
 
@@ -74,10 +67,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(true);
     try {
       const profile = await api.auth.signIn(email, pass);
-      if (isMounted.current) {
-        if (profile && profile.id === 'error') throw new Error(profile.full_name);
-        setUser(profile);
-      }
+      if (isMounted.current) setUser(profile);
     } finally {
       if (isMounted.current) setIsLoading(false);
     }
@@ -87,22 +77,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(true);
     try {
       const profile = await api.auth.signUp(email, pass, name, address);
-      if (isMounted.current) {
-        if (profile && profile.id === 'error') throw new Error(profile.full_name);
-        setUser(profile);
-      }
+      if (isMounted.current) setUser(profile);
     } finally {
       if (isMounted.current) setIsLoading(false);
     }
   };
 
   const signOut = async () => {
-    try {
-      await api.auth.signOut();
-      if (isMounted.current) setUser(null);
-    } catch (e) {
-      console.warn("SignOut failed:", e);
-    }
+    await api.auth.signOut();
+    if (isMounted.current) setUser(null);
   };
 
   return (

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, ShoppingCart, User, Phone, UtensilsCrossed, Settings } from 'lucide-react';
+import { Menu, X, ShoppingCart, User, Phone, UtensilsCrossed, Settings, Truck } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 
@@ -19,8 +19,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const navItems = [
     { path: '/', label: 'Меню', icon: <UtensilsCrossed size={20} /> },
-    { path: '/delivery', label: 'Доставка', icon: <ShoppingCart size={20} /> },
-    { path: '/about', label: 'О нас', icon: <User size={20} /> },
+    { path: '/delivery', label: 'Доставка', icon: <Truck size={20} /> },
     { path: '/contacts', label: 'Контакты', icon: <Phone size={20} /> },
   ];
 
@@ -32,40 +31,40 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div className="min-h-screen flex flex-col bg-[#f9f3e9] text-amber-950 font-sans">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-gradient-to-r from-amber-900 to-amber-800 text-white shadow-md">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <button onClick={toggleSidebar} className="p-1 hover:bg-white/10 rounded-full transition">
-              <Menu size={28} />
+        <div className="container mx-auto px-2 md:px-4 py-2 md:py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2 md:gap-4">
+            <button onClick={toggleSidebar} className="p-2 hover:bg-white/10 rounded-full transition">
+              <Menu size={24} className="md:w-7 md:h-7" />
             </button>
             <Link to="/" className="flex items-center gap-2 group">
-              <div className="bg-white/20 p-2 rounded-full group-hover:bg-white/30 transition">
-                <UtensilsCrossed size={24} />
+              <div className="bg-white/20 p-1.5 md:p-2 rounded-full group-hover:bg-white/30 transition hidden sm:block">
+                <UtensilsCrossed size={20} className="md:w-6 md:h-6" />
               </div>
-              <h1 className="text-xl md:text-2xl font-bold tracking-wide text-shadow">
+              <h1 className="text-lg md:text-2xl font-bold tracking-tight md:tracking-wide">
                 Чайхана Жулебино
               </h1>
             </Link>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 md:gap-3">
             {isAdmin && (
-              <Link to="/admin" className="hidden md:flex items-center gap-1 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-sm font-medium transition text-white">
-                <Settings size={16} />
+              <Link to="/admin" className="hidden lg:flex items-center gap-1 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-xs font-medium transition text-white">
+                <Settings size={14} />
                 <span>Админ</span>
               </Link>
             )}
             
             <Link to="/checkout" className="relative p-2 hover:bg-white/10 rounded-full transition">
-              <ShoppingCart size={26} />
+              <ShoppingCart size={24} className="md:w-[26px] md:h-[26px]" />
               {totalItems > 0 && (
-                <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-amber-900 animate-pulse">
+                <span className="absolute top-0 right-0 bg-orange-500 text-white text-[10px] font-bold w-4 h-4 md:w-5 md:h-5 flex items-center justify-center rounded-full border-2 border-amber-900 animate-pulse">
                   {totalItems}
                 </span>
               )}
             </Link>
             
             <Link to="/profile" className="p-2 hover:bg-white/10 rounded-full transition">
-              <User size={26} />
+              <User size={24} className="md:w-[26px] md:h-[26px]" />
             </Link>
           </div>
         </div>
@@ -107,31 +106,30 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-6 md:py-8 max-w-6xl">
+      <main className="flex-1 container mx-auto px-3 md:px-4 py-4 md:py-8 max-w-6xl">
         {children}
       </main>
 
       {/* Footer */}
-      <footer className="bg-amber-950 text-white py-12 mt-auto">
+      <footer className="bg-amber-950 text-white py-10 md:py-12 mt-auto">
         <div className="container mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 mb-6">
             <UtensilsCrossed size={24} className="text-orange-400" />
-            <h2 className="text-xl font-bold">Чайхана Жулебино</h2>
+            <h2 className="text-lg md:text-xl font-bold">Чайхана Жулебино</h2>
           </div>
-          <div className="flex justify-center gap-6 mb-8 text-sm text-gray-400">
-            <Link to="/about" className="hover:text-white transition">О нас</Link>
+          <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-8 text-xs md:text-sm text-gray-400">
             <Link to="/delivery" className="hover:text-white transition">Доставка</Link>
-            <Link to="/privacy" className="hover:text-white transition">Приватность</Link>
             <Link to="/contacts" className="hover:text-white transition">Контакты</Link>
+            <Link to="/privacy" className="hover:text-white transition">Приватность</Link>
           </div>
           
           <div className="space-y-1 mb-6">
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest">© 2025 Чайхана Жулебино. Все права защищены.</p>
-            <p className="text-[9px] text-gray-500/60 font-medium tracking-wider">
+            <p className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest">© 2025 Чайхана Жулебино. Все права защищены.</p>
+            <p className="text-[8px] md:text-[9px] text-gray-500/60 font-medium tracking-wider">
               ИНН 7707083893 | ОГРНИП 325508100324129
             </p>
           </div>
-          <p className="text-[10px] text-gray-600 uppercase tracking-widest">Работаем с душой. Готовим с любовью.</p>
+          <p className="text-[9px] md:text-[10px] text-gray-600 uppercase tracking-widest">Работаем с душой. Готовим с любовью.</p>
         </div>
       </footer>
     </div>

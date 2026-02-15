@@ -36,4 +36,5 @@ export interface Order {
   payment_method: 'card';
   payment_status: 'pending' | 'succeeded' | 'failed';
   assigned_courier_id?: number;
+  telegram_message_id?: number;
 }

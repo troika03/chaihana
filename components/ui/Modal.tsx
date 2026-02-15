@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 
@@ -23,7 +24,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
@@ -31,17 +32,21 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
       />
       
       {/* Content */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gradient-to-r from-orange-50 to-white">
-          <h3 className="text-xl font-bold text-amber-900">{title}</h3>
+      <div className="relative bg-white rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in slide-in-from-bottom sm:zoom-in duration-300 max-h-[92vh] flex flex-col">
+        {/* Mobile Handle */}
+        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
+        
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100 bg-gradient-to-r from-orange-50/50 to-white">
+          <h3 className="text-lg sm:text-xl font-black text-amber-950 italic tracking-tight">{title}</h3>
           <button 
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-100 text-gray-500 transition"
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-400 transition"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
-        <div className="p-6 max-h-[80vh] overflow-y-auto">
+        
+        <div className="p-5 sm:p-8 overflow-y-auto custom-scrollbar">
           {children}
         </div>
       </div>
