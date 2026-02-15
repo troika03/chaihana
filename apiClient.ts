@@ -19,7 +19,7 @@ const INITIAL_DISHES: Dish[] = [
   { id: 4, name: 'Салат Ачу-Чучук', category: 'salads', price: 290, image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800', description: 'Острый салат из тонко нарезанных томатов, лука и чили.', available: true },
   { id: 5, name: 'Шурпа', category: 'soups', price: 350, image: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=800', description: 'Наваристый мясной бульон with крупными кусками мяса и овощей.', available: true },
   { id: 6, name: 'Пахлава Медовая', category: 'desserts', price: 250, image: 'https://images.unsplash.com/photo-1519197924294-4ba991a11128?w=800', description: 'Традиционная сладость with грецким орехом и натуральным медом.', available: true },
-  { id: 7, name: 'Шашлык из баранины', category: 'main', price: 550, image: 'https://images.unsplash.com/photo-1529692236671-f1f6e994a52c?w=800', description: 'Нежная корейка ягненка, маринованная в восточных специями.', available: true },
+  { id: 7, name: 'Шашлык из баранины', category: 'main', price: 550, image: 'https://images.unsplash.com/photo-1529692236671-f1f6e994a52c?w=800', description: 'Нежная корейка ягненка, маринованная в восточных специях.', available: true },
   { id: 8, name: 'Зеленый чай with лотосом', category: 'drinks', price: 150, image: 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?w=800', description: 'Освежающий чай в пиалах.', available: true },
 ];
 
@@ -48,6 +48,10 @@ const sendTelegramNotification = async (order: Order) => {
       .map(item => `• <b>${item.dish.name}</b> x${item.quantity}`)
       .join('\n');
 
+    // Создаем ссылку на Яндекс Карты на основе адреса
+    const encodedAddress = encodeURIComponent(order.delivery_address || '');
+    const yandexMapsUrl = `https://yandex.ru/maps/?text=${encodedAddress}`;
+
     const message = `
 <b>🚚 ЗАКАЗ ПЕРЕДАН КУРЬЕРУ</b>
 ──────────────────
@@ -55,6 +59,7 @@ const sendTelegramNotification = async (order: Order) => {
 💰 <b>Сумма:</b> ${order.total_amount} ₽
 📞 <b>Телефон:</b> <a href="tel:${order.contact_phone}">${order.contact_phone || 'Не указан'}</a>
 📍 <b>Адрес:</b> ${order.delivery_address || 'Самовывоз'}
+🔗 <a href="${yandexMapsUrl}">📍 Посмотреть на карте (Яндекс)</a>
 💬 <b>Коммент:</b> ${order.comment || 'Нет'}
 ──────────────────
 📝 <b>Состав:</b>
@@ -70,6 +75,7 @@ ${itemsList}
         chat_id: chatId,
         text: message,
         parse_mode: 'HTML',
+        disable_web_page_preview: false
       }),
     });
 
