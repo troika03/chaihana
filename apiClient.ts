@@ -18,6 +18,18 @@ export const INITIAL_DISHES: Partial<Dish>[] = [
   { name: 'Самса тандырная', category: 'bakery', price: 75, image: 'https://images.unsplash.com/photo-1601303584126-269c824d4e5e?w=800', description: 'Хрустящая выпечка из тандыра.', ingredients: 'Тесто слоеное, говядина, курдюк, лук', available: true },
   { name: 'Салат Ачи-Чучук', category: 'salads', price: 250, image: 'https://images.unsplash.com/photo-1546793665-c74683c3f38d?w=800', description: 'Тонко нарезанные помидоры с луком и острым перцем.', ingredients: 'Помидоры, красный лук, острый перец, базилик', available: true },
   { name: 'Чай с чабрецом', category: 'drinks', price: 300, image: 'https://images.unsplash.com/photo-1576091160550-2173bdd9962a?w=800', description: 'Ароматный черный чай в чайнике.', ingredients: 'Черный чай, чабрец свежий', available: true },
+  
+  // Напитки из фотографий холодильника
+  { name: 'Натахтари Дюшес', category: 'drinks', price: 180, image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=800', description: 'Грузинский лимонад со вкусом спелой груши.', ingredients: 'Вода горная, сахар, сироп Дюшес, стекло 0.5л', available: true },
+  { name: 'Натахтари Тархун', category: 'drinks', price: 180, image: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800', description: 'Классический лимонад с экстрактом эстрагона.', ingredients: 'Вода горная, сахар, экстракт тархуна, стекло 0.5л', available: true },
+  { name: 'Натахтари Саперави', category: 'drinks', price: 180, image: 'https://images.unsplash.com/photo-1543157145-f78c636d023d?w=800', description: 'Насыщенный лимонад со вкусом красного винограда.', ingredients: 'Вода горная, сахар, экстракт винограда Саперави, стекло 0.5л', available: true },
+  { name: 'Flavis Гранат (0.5л)', category: 'drinks', price: 160, image: 'https://images.unsplash.com/photo-1563227812-0ea4c22e6cc8?w=800', description: 'Освежающий гранатовый напиток в большом объеме.', ingredients: 'Гранатовый сок восстановленный, вода, сахар, 0.5л', available: true },
+  { name: 'Flavis Гранат (0.25л)', category: 'drinks', price: 95, image: 'https://images.unsplash.com/photo-1621506289937-4c40aa2cc95c?w=800', description: 'Порционный гранатовый напиток.', ingredients: 'Гранатовый сок, вода, сахар, 0.25л', available: true },
+  { name: 'RC Cola', category: 'drinks', price: 130, image: 'https://images.unsplash.com/photo-1581009146145-b5ef03a7403f?w=800', description: 'Оригинальная американская кола.', ingredients: 'Очищенная вода, сахар, натуральный краситель карамель, кофеин', available: true },
+  { name: 'RC Refresher Апельсин', category: 'drinks', price: 130, image: 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800', description: 'Газированный напиток с ярким вкусом апельсина.', ingredients: 'Вода, сахар, апельсиновый сок, лимонная кислота', available: true },
+  { name: 'RC Refresher Яблоко', category: 'drinks', price: 130, image: 'https://images.unsplash.com/photo-1594950195709-a14f66c242d7?w=800', description: 'Легкий напиток со вкусом зеленого яблока.', ingredients: 'Вода, сахар, яблочный сок, ароматизатор яблоко', available: true },
+  { name: 'RC Refresher Лимон-Лайм', category: 'drinks', price: 130, image: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=800', description: 'Цитрусовый микс лимона и лайма.', ingredients: 'Вода, сахар, натуральные экстракты лимона и лайма', available: true },
+  { name: 'Adrenaline Rush', category: 'drinks', price: 230, image: 'https://images.unsplash.com/photo-1622543925917-763c34d1538c?w=800', description: 'Энергетический напиток для активной жизни.', ingredients: 'L-карнитин, таурин, кофеин, витамины группы B, 0.449л', available: true },
 ];
 
 export const api = {

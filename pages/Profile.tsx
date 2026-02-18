@@ -12,10 +12,13 @@ import {
   LogIn, 
   UserPlus, 
   XCircle, 
-  AlertTriangle 
+  AlertTriangle,
+  CreditCard,
+  CheckCircle2
 } from 'lucide-react';
 import Modal from '../components/ui/Modal.tsx';
 import { Order } from './types.ts';
+import { initiateYooKassaPayment } from '../services/paymentService.ts';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Новый',
@@ -35,6 +38,7 @@ const Profile: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [activePaymentId, setActivePaymentId] = useState<number | null>(null);
   
   const [formData, setFormData] = useState({ 
     email: '', 
@@ -111,6 +115,20 @@ const Profile: React.FC = () => {
       setAuthError(msg);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handlePayment = async (orderId: number, amount: number) => {
+    setActivePaymentId(orderId);
+    try {
+      const result = await initiateYooKassaPayment(orderId, amount);
+      if (!result.success) {
+        alert(result.message);
+      }
+    } catch (err) {
+      alert("Не удалось инициировать платеж.");
+    } finally {
+      setActivePaymentId(null);
     }
   };
 
@@ -254,14 +272,34 @@ const Profile: React.FC = () => {
         ) : (
           <div className="grid gap-4">
             {orders.map(order => (
-              <div key={order.id} className="bg-white p-6 md:p-8 rounded-[2.5rem] md:rounded-[3rem] border border-amber-50 flex flex-col sm:flex-row justify-between items-center gap-4 hover:shadow-lg transition-shadow overflow-hidden animate-in slide-in-from-left-4">
-                <div className="text-center sm:text-left">
+              <div key={order.id} className="bg-white p-6 md:p-8 rounded-[2.5rem] md:rounded-[3rem] border border-amber-50 flex flex-col md:flex-row justify-between items-center gap-6 hover:shadow-lg transition-shadow overflow-hidden animate-in slide-in-from-left-4">
+                <div className="text-center md:text-left flex-1">
                   <h4 className="font-black text-amber-950 text-xl tracking-tight">Заказ #{order.id.toString().slice(-4)} на {order.total_amount} ₽</h4>
-                  <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest flex items-center gap-2 mt-1 justify-center sm:justify-start">
-                    <Clock size={10} /> {new Date(order.created_at).toLocaleString('ru-RU')}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-3 mt-2 justify-center md:justify-start">
+                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest flex items-center gap-1">
+                      <Clock size={10} /> {new Date(order.created_at).toLocaleString('ru-RU')}
+                    </p>
+                    <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 ${
+                      order.payment_status === 'succeeded' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'
+                    }`}>
+                      {order.payment_status === 'succeeded' ? <CheckCircle2 size={10} /> : <CreditCard size={10} />}
+                      {order.payment_status === 'succeeded' ? 'Оплачен' : 'Ожидает оплаты'}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4">
+                
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-center">
+                  {order.payment_status !== 'succeeded' && order.status !== 'cancelled' && (
+                    <button 
+                      onClick={() => handlePayment(order.id, order.total_amount)}
+                      disabled={activePaymentId === order.id}
+                      className="px-6 py-3 bg-orange-500 text-white rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-orange-600 transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {activePaymentId === order.id ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                      Оплатить
+                    </button>
+                  )}
+                  
                   {order.status === 'pending' && (
                     <button 
                       onClick={() => setOrderToCancel(order)}
@@ -270,6 +308,7 @@ const Profile: React.FC = () => {
                       <XCircle size={20} />
                     </button>
                   )}
+                  
                   <span className={`px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest ${
                     order.status === 'delivered' ? 'bg-green-100 text-green-700' : 
                     order.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'

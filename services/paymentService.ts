@@ -1,32 +1,12 @@
-
 import { supabase } from '../supabaseClient';
 
 /**
- * Проверка, настроен ли проект Supabase
+ * Сервис интеграции с ЮKassa через Supabase Edge Functions.
+ * Требует наличия развернутых функций 'yookassa-pay' и 'yookassa-webhook'.
  */
-const isConfigured = () => {
-  try {
-    const url = (supabase as any).supabaseUrl;
-    return !!url && !url.includes('YOUR_PROJECT_ID');
-  } catch {
-    return false;
-  }
-};
 
-/**
- * Интеграция с ЮKassa через Supabase Edge Functions.
- */
 export const initiateYooKassaPayment = async (orderId: number, amount: number) => {
-  // Демонстрационный режим теперь включается только если URL вообще не задан
-  if (!isConfigured()) {
-    console.log('[Payment] Demo Mode: Simulating payment process...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    return { 
-      success: true, 
-      message: 'Демо-режим: платеж успешно "создан". Перенаправляем в профиль...',
-      demo: true 
-    };
-  }
+  console.log(`[Payment] Initiating payment for Order #${orderId}, Amount: ${amount}`);
 
   try {
     // Вызываем Edge Function 'yookassa-pay'
@@ -34,36 +14,49 @@ export const initiateYooKassaPayment = async (orderId: number, amount: number) =
       body: { 
         orderId, 
         amount, 
-        description: `Оплата заказа #${orderId} в Чайхана Жулебино` 
+        description: `Оплата заказа #${orderId} в Чайхана Жулебино`,
+        return_url: `${window.location.origin}/#/profile`
       }
     });
 
     if (error) {
       console.error('[Supabase Function Error]', error);
-      throw new Error(`Ошибка вызова функции: ${error.message || 'Unknown error'}`);
+      // Если функция не найдена (404), вероятно она не развернута
+      if (error.message?.includes('404')) {
+        throw new Error('Платежная система временно недоступна (Function not deployed).');
+      }
+      throw new Error(error.message || 'Ошибка связи с платежным шлюзом.');
     }
 
-    if (!data || !data.confirmation?.confirmation_url) {
-      console.error('[YooKassa API Error Response]', data);
-      const detail = data?.description || data?.detail || 'Не удалось получить ссылку на оплату от ЮKassa';
-      throw new Error(detail);
+    if (!data || (!data.confirmation_url && !data.demo_success)) {
+      throw new Error(data?.error || 'Ошибка платежной системы: ссылка на оплату не получена.');
     }
 
-    // Сохраняем статус в базу данных
-    await supabase
-      .from('orders')
-      .update({ payment_status: 'pending' })
-      .eq('id', orderId);
+    // Сохраняем payment_id для отслеживания
+    if (data.payment_id) {
+      await supabase
+        .from('orders')
+        .update({ payment_id: data.payment_id, payment_status: 'pending' })
+        .eq('id', orderId);
+    }
 
-    // Перенаправляем пользователя на страницу оплаты ЮKassa
-    window.location.href = data.confirmation.confirmation_url;
+    // Если мы получили URL — перенаправляем
+    if (data.confirmation_url) {
+      window.location.href = data.confirmation_url;
+      return { success: true, message: 'Перенаправление на шлюз...' };
+    }
 
-    return { success: true, message: 'Перенаправление на оплату...' };
+    // Обработка демо-режима
+    if (data.demo_success) {
+      return { success: true, demo: true };
+    }
+
+    return { success: false, message: 'Неизвестный ответ от сервера.' };
   } catch (err: any) {
-    console.error('[YooKassa Integration Error]', err);
+    console.error('[YooKassa Init Error]', err);
     return { 
       success: false, 
-      message: err.message || 'Внутренняя ошибка при создании платежа' 
+      message: err.message || 'Произошла ошибка при создании счета.' 
     };
   }
 };

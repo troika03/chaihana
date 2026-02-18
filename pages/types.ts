@@ -35,6 +35,7 @@ export interface Order {
   comment?: string;
   payment_method: 'card';
   payment_status: 'pending' | 'succeeded' | 'failed';
+  payment_id?: string; // ID платежа в системе ЮKassa
   assigned_courier_id?: number;
   telegram_message_id?: number;
 }

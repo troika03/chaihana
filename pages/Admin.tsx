@@ -15,33 +15,49 @@ import {
   AlertTriangle,
   Upload,
   Eye,
-  EyeOff,
-  FileText,
-  Sparkles,
+  Settings,
+  CreditCard,
+  UserCheck,
+  Info,
+  Terminal,
+  Copy,
+  ExternalLink,
+  ChevronRight,
+  FolderTree,
+  Ship,
+  ChefHat,
+  Package,
   CheckCircle2,
-  XCircle,
-  Info
+  Ban,
+  Save,
+  X
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { supabase } from '../supabaseClient';
 import Modal from '../components/ui/Modal.tsx';
 
+const CATEGORIES = [
+  { id: 'main', label: 'Горячее' },
+  { id: 'soups', label: 'Супы' },
+  { id: 'bakery', label: 'Выпечка' },
+  { id: 'salads', label: 'Салаты' },
+  { id: 'drinks', label: 'Напитки' },
+];
+
 const Admin: React.FC = () => {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'orders' | 'history' | 'menu' | 'stoplist'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'settings'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   
   const [soundEnabled, setSoundEnabled] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  const [editingDish, setEditingDish] = useState<Partial<Dish> | null>(null);
-  const [isDishModalOpen, setIsDishModalOpen] = useState(false);
-  const [dishToDelete, setDishToDelete] = useState<Dish | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // States for Menu Editing
+  const [editingDish, setEditingDish] = useState<Partial<Dish> | null>(null);
+  const [isSavingDish, setIsSavingDish] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -59,22 +75,9 @@ const Admin: React.FC = () => {
     }
   };
 
-  const handleSeedDishes = async () => {
-    setIsLoading(true);
-    try {
-      await api.dishes.seed();
-      await loadData();
-    } catch (err) {
-      alert("Ошибка при восстановлении меню");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (isAdmin) {
       loadData();
-      
       const ordersChannel = supabase
         .channel('admin_orders_sync')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
@@ -87,47 +90,39 @@ const Admin: React.FC = () => {
           setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new as Order : o));
         })
         .subscribe();
-
+      
       const dishesChannel = supabase
         .channel('admin_dishes_sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'dishes' }, (payload) => {
-          if (payload.eventType === 'UPDATE') {
-            setDishes(prev => prev.map(d => d.id === payload.new.id ? payload.new as Dish : d));
-          } else if (payload.eventType === 'INSERT') {
-            setDishes(prev => [...prev, payload.new as Dish]);
-          } else if (payload.eventType === 'DELETE') {
-            setDishes(prev => prev.filter(d => d.id !== payload.old.id));
-          }
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'dishes' }, () => {
+          loadData();
         })
         .subscribe();
 
-      return () => {
-        supabase.removeChannel(ordersChannel);
+      return () => { 
+        supabase.removeChannel(ordersChannel); 
         supabase.removeChannel(dishesChannel);
       };
     }
   }, [isAdmin, soundEnabled]);
 
   const activeOrders = useMemo(() => orders.filter(o => !['delivered', 'cancelled'].includes(o.status)), [orders]);
-  const pastOrders = useMemo(() => orders.filter(o => ['delivered', 'cancelled'].includes(o.status)), [orders]);
-  const stopListDishes = useMemo(() => dishes.filter(d => !d.available), [dishes]);
 
   const handleSaveDish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDish) return;
-    setIsLoading(true);
+    setIsSavingDish(true);
     try {
       if (editingDish.id) {
         await api.dishes.update(editingDish.id, editingDish);
       } else {
         await api.dishes.create(editingDish);
       }
-      setIsDishModalOpen(false);
       setEditingDish(null);
+      loadData();
     } catch (err) {
-      alert("Ошибка сохранения");
+      alert("Ошибка сохранения блюда");
     } finally {
-      setIsLoading(false);
+      setIsSavingDish(false);
     }
   };
 
@@ -135,28 +130,13 @@ const Admin: React.FC = () => {
     try {
       await api.dishes.update(dish.id, { available: !dish.available });
     } catch (err) {
-      alert("Ошибка обновления статуса");
-    }
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploading(true);
-    try {
-      const imageUrl = await api.storage.uploadDishImage(file);
-      setEditingDish(prev => ({ ...prev, image: imageUrl }));
-    } catch (err: any) {
-      alert("Ошибка при загрузке фото");
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      alert("Ошибка обновления статуса блюда");
     }
   };
 
   if (!isAdmin) return (
     <div className="flex flex-col items-center justify-center py-40 gap-8 text-center px-4">
-      <ShieldAlert size={80} className="text-amber-900/10" />
+      <ShieldAlert size={80} className="text-amber-950/10" />
       <h2 className="text-2xl font-black text-amber-950 uppercase italic tracking-tighter">Доступ ограничен</h2>
     </div>
   );
@@ -165,124 +145,122 @@ const Admin: React.FC = () => {
     <div className="space-y-6 pb-24 animate-in fade-in duration-700">
       <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl md:text-4xl font-black text-amber-950 uppercase italic tracking-tighter flex items-center gap-2">
-            Админ <BellRing className={activeOrders.some(o => o.status === 'pending') ? "text-orange-500 animate-bounce" : "text-amber-200"} size={20} />
+      {/* Header Admin */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-[2.5rem] border border-amber-50 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="bg-amber-950 p-3 rounded-2xl text-white"><ChefHat size={28} /></div>
+          <h1 className="text-2xl md:text-3xl font-black text-amber-950 uppercase italic tracking-tighter">
+            Панель управления
           </h1>
-          <p className="text-amber-800/40 font-bold text-[9px] uppercase tracking-[0.2em] mt-1">Панель управления заказами</p>
         </div>
-        
         <div className="flex gap-2 w-full sm:w-auto">
-          <button onClick={() => setSoundEnabled(!soundEnabled)} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 rounded-xl border font-black text-[10px] uppercase tracking-widest transition ${soundEnabled ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-400 border-gray-100'}`}>
-            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+          <button onClick={() => setSoundEnabled(!soundEnabled)} className={`p-3 rounded-xl border transition ${soundEnabled ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-400 border-gray-100'}`}>
+            {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
           </button>
-          <button onClick={loadData} disabled={isLoading} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white px-4 py-3 rounded-xl border border-gray-100 font-black text-[10px] uppercase tracking-widest hover:bg-amber-50 shadow-sm">
+          <button onClick={loadData} disabled={isLoading} className="flex flex-1 sm:flex-none items-center justify-center gap-2 bg-amber-950 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl">
              {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />} Обновить
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto no-scrollbar p-1 bg-amber-100/30 rounded-2xl w-full sm:w-fit">
-        {[
-          { id: 'orders', label: `Заказы (${activeOrders.length})` },
-          { id: 'history', label: 'История' },
-          { id: 'stoplist', label: `Стоп (${stopListDishes.length})` },
-          { id: 'menu', label: 'Меню' },
-        ].map(t => (
-          <button 
-            key={t.id} 
-            onClick={() => setActiveTab(t.id as any)} 
-            className={`whitespace-nowrap px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === t.id ? 'bg-amber-950 text-white shadow-lg' : 'text-amber-900/40 hover:bg-white'}`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="flex gap-1 overflow-x-auto no-scrollbar p-1 bg-amber-100/30 rounded-2xl w-full">
+        <button onClick={() => setActiveTab('orders')} className={`flex-1 px-5 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'orders' ? 'bg-amber-950 text-white shadow-lg' : 'text-amber-900/40'}`}>
+          Заказы ({activeOrders.length})
+        </button>
+        <button onClick={() => setActiveTab('menu')} className={`flex-1 px-5 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'menu' ? 'bg-amber-950 text-white shadow-lg' : 'text-amber-900/40'}`}>
+          Меню ({dishes.length})
+        </button>
+        <button onClick={() => setActiveTab('settings')} className={`flex-1 px-5 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'settings' ? 'bg-amber-950 text-white shadow-lg' : 'text-amber-900/40'}`}>
+          Настройки
+        </button>
       </div>
 
       {/* Content Area */}
       <div className="animate-in slide-in-from-bottom-4 duration-500">
+        
+        {/* ORDERS TAB */}
         {activeTab === 'orders' && (
-          <div className="space-y-3">
-            {activeOrders.map(order => (
-              <div key={order.id} className="bg-white p-5 rounded-[2rem] border border-amber-50 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-3">
-                    <span className="font-black text-amber-950 text-base">#{order.id.toString().slice(-4)}</span>
-                    <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest">{order.total_amount} ₽</span>
+          <div className="grid gap-4">
+            {activeOrders.length === 0 ? (
+              <div className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">Активных заказов нет</div>
+            ) : (
+              activeOrders.map(order => (
+                <div key={order.id} className="bg-white p-6 rounded-[2.5rem] border border-amber-50 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="flex-1 space-y-1 w-full md:w-auto">
+                    <div className="flex items-center gap-3">
+                      <span className="font-black text-amber-950 text-lg">#{order.id.toString().slice(-4)}</span>
+                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${order.payment_status === 'succeeded' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                        {order.total_amount} ₽ • {order.payment_status === 'succeeded' ? 'Оплачен' : 'Ожидание'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-900/60 font-bold">{order.delivery_address}</p>
+                    <p className="text-xs text-orange-600 font-black">{order.contact_phone}</p>
                   </div>
-                  <p className="text-[11px] text-amber-900/60 font-bold leading-tight">{order.delivery_address}</p>
-                  <p className="text-[9px] text-gray-400 font-medium">{order.contact_phone}</p>
+                  
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                    <select value={order.status} onChange={(e) => api.orders.updateStatus(order.id, e.target.value as any)} className="flex-1 md:flex-none bg-amber-50 p-4 rounded-xl font-black text-[10px] uppercase border-none outline-none shadow-sm cursor-pointer hover:bg-amber-100 transition-colors">
+                      <option value="pending">🔔 Новый</option>
+                      <option value="confirmed">👍 Принят</option>
+                      <option value="cooking">👨‍🍳 Кухня</option>
+                      <option value="delivering">🚚 Путь</option>
+                      <option value="delivered">✅ ОК</option>
+                      <option value="cancelled">❌ Отмена</option>
+                    </select>
+                    <button onClick={() => setViewingOrder(order)} className="p-4 bg-amber-950 text-white rounded-xl hover:bg-orange-500 transition shadow-sm">
+                      <Eye size={20} />
+                    </button>
+                  </div>
                 </div>
-                
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                   <select 
-                    value={order.status} 
-                    onChange={(e) => api.orders.updateStatus(order.id, e.target.value as any)} 
-                    className="flex-1 sm:flex-none bg-amber-50 p-3 rounded-xl font-black text-[10px] uppercase border-none outline-none shadow-sm focus:ring-2 focus:ring-orange-500/20"
-                   >
-                     <option value="pending">🔔 Новый</option>
-                     <option value="confirmed">👍 Принят</option>
-                     <option value="cooking">👨‍🍳 Кухня</option>
-                     <option value="delivering">🚚 Путь</option>
-                     <option value="delivered">✅ ОК</option>
-                     <option value="cancelled">❌ Отмена</option>
-                   </select>
-                   <button onClick={() => setViewingOrder(order)} className="p-3 bg-amber-950 text-white rounded-xl hover:bg-orange-500 transition shadow-sm">
-                     <Eye size={18} />
-                   </button>
-                </div>
-              </div>
-            ))}
-            {activeOrders.length === 0 && (
-              <div className="py-20 text-center text-amber-900/20 font-black uppercase text-xs tracking-widest">Активных заказов нет</div>
+              ))
             )}
           </div>
         )}
 
+        {/* MENU TAB */}
         {activeTab === 'menu' && (
           <div className="space-y-6">
-            {dishes.length === 0 && !isLoading && (
-              <div className="bg-amber-50 p-10 rounded-[3rem] text-center border-4 border-dashed border-amber-100 flex flex-col items-center gap-4">
-                <Sparkles size={48} className="text-amber-200" />
-                <p className="font-black text-amber-950 uppercase text-[10px] tracking-widest">База данных меню пуста</p>
-                <button onClick={handleSeedDishes} className="bg-amber-950 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">Восстановить меню</button>
-              </div>
-            )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
-              <button 
-                onClick={() => { setEditingDish({ available: true, category: 'main', name: '', description: '', price: 0, ingredients: '' }); setIsDishModalOpen(true); }}
-                className="bg-amber-950 p-6 rounded-[2rem] flex flex-col justify-center items-center text-center text-white hover:bg-orange-600 transition-all shadow-xl"
-              >
-                <Plus size={32} className="mb-2" />
-                <span className="font-black text-[9px] uppercase tracking-widest">Добавить</span>
-              </button>
+            <button 
+              onClick={() => setEditingDish({ name: '', price: 0, category: 'main', available: true, image: '', description: '' })}
+              className="w-full py-6 bg-orange-500 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-orange-600 transition flex items-center justify-center gap-3"
+            >
+              <Plus size={20} /> Добавить блюдо
+            </button>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {dishes.map(dish => (
-                <div key={dish.id} className={`bg-white p-3 rounded-[2rem] border shadow-sm relative group flex flex-col transition-all ${dish.available ? 'border-amber-50' : 'border-red-100 opacity-75'}`}>
-                  <div className="relative">
-                    <img src={dish.image} className={`w-full h-24 sm:h-32 object-cover rounded-2xl mb-3 ${!dish.available && 'grayscale'}`} alt={dish.name} />
+                <div key={dish.id} className={`bg-white rounded-[3rem] overflow-hidden border border-amber-50 shadow-sm flex flex-col ${!dish.available ? 'opacity-50 grayscale' : ''}`}>
+                  <div className="h-40 relative">
+                    <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" />
+                    <button onClick={() => setEditingDish(dish)} className="absolute top-4 right-4 p-3 bg-white/90 backdrop-blur rounded-2xl text-amber-950 shadow-lg hover:bg-white">
+                      <Edit3 size={18} />
+                    </button>
                     {!dish.available && (
-                      <div className="absolute inset-0 bg-red-600/20 flex items-center justify-center rounded-2xl">
-                        <span className="bg-red-600 text-white text-[8px] font-black uppercase px-2 py-1 rounded-lg">СТОП</span>
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <span className="bg-red-500 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest">СТОП-ЛИСТ</span>
                       </div>
                     )}
                   </div>
-                  <h4 className="font-black text-amber-950 text-[10px] sm:text-xs truncate px-1">{dish.name}</h4>
-                  <div className="flex items-center justify-between mt-auto pt-2">
-                     <span className="text-[10px] font-bold text-orange-500">{dish.price} ₽</span>
-                     <div className="flex gap-1">
-                       <button 
-                        onClick={() => toggleAvailability(dish)} 
-                        className={`p-2 rounded-lg transition-colors ${dish.available ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}
-                        title={dish.available ? "Убрать из меню" : "Вернуть в меню"}
-                       >
-                         {dish.available ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
-                       </button>
-                       <button onClick={() => { setEditingDish(dish); setIsDishModalOpen(true); }} className="p-2 bg-amber-50 text-amber-900 rounded-lg"><Edit3 size={14} /></button>
-                       <button onClick={() => setDishToDelete(dish)} className="p-2 bg-red-50 text-red-500 rounded-lg"><Trash2 size={14} /></button>
-                     </div>
+                  <div className="p-6 space-y-4 flex-1 flex flex-col">
+                    <div className="flex-1">
+                      <h4 className="font-black text-amber-950 uppercase text-sm tracking-tight line-clamp-1">{dish.name}</h4>
+                      <p className="text-orange-500 font-black text-lg">{dish.price} ₽</p>
+                    </div>
+                    <div className="flex gap-2 pt-4">
+                      <button 
+                        onClick={() => toggleAvailability(dish)}
+                        className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 ${dish.available ? 'bg-amber-50 text-amber-950' : 'bg-green-50 text-green-600'}`}
+                      >
+                        {dish.available ? <Ban size={14} /> : <CheckCircle2 size={14} />}
+                        {dish.available ? 'В стоп' : 'Вернуть'}
+                      </button>
+                      <button 
+                        onClick={async () => { if(confirm('Удалить блюдо?')) await api.dishes.delete(dish.id); loadData(); }}
+                        className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -290,143 +268,135 @@ const Admin: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'stoplist' && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
-            {stopListDishes.map(dish => (
-              <div key={dish.id} className="bg-white p-4 rounded-[2rem] border border-red-100 shadow-sm flex flex-col items-center text-center">
-                <img src={dish.image} className="w-20 h-20 object-cover rounded-2xl mb-3 grayscale" alt={dish.name} />
-                <h4 className="font-black text-amber-950 text-[10px] uppercase tracking-tight mb-4">{dish.name}</h4>
-                <button 
-                  onClick={() => toggleAvailability(dish)}
-                  className="w-full bg-green-600 text-white py-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2"
-                >
-                  <Eye size={12} /> В меню
-                </button>
+        {/* SETTINGS TAB (Compact) */}
+        {activeTab === 'settings' && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-white p-10 rounded-[3rem] border border-amber-50 shadow-sm space-y-6">
+              <div className="flex items-center gap-4">
+                <Settings className="text-orange-500" size={28} />
+                <h3 className="text-xl font-black text-amber-950 uppercase italic tracking-tighter">Настройки системы</h3>
               </div>
-            ))}
-            {stopListDishes.length === 0 && (
-              <div className="col-span-full py-20 flex flex-col items-center gap-4 text-amber-900/20">
-                <CheckCircle2 size={48} />
-                <p className="font-black uppercase text-xs tracking-widest">Все блюда в наличии</p>
+              <p className="text-sm text-gray-500">Если вы добавили новые переменные в Supabase, нажмите кнопку ниже для синхронизации.</p>
+              <div className="grid gap-3">
+                <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-2xl">
+                  <Terminal size={18} className="text-amber-900/30" />
+                  <code className="text-[11px] font-mono text-amber-900">npx supabase secrets list</code>
+                </div>
               </div>
-            )}
+            </div>
+            
+            <div className="bg-amber-950 text-white p-10 rounded-[3rem] shadow-2xl space-y-4">
+               <h4 className="font-black text-xs uppercase tracking-widest text-orange-500">Юридические данные</h4>
+               <p className="text-sm opacity-60">ИП Садыкова Махфуза Маъруфовна<br/>ИНН 7707083893 | ОГРНИП 325508100324129</p>
+            </div>
           </div>
         )}
-
-        {activeTab === 'history' && (
-           <div className="space-y-3">
-             {pastOrders.map(order => (
-               <div key={order.id} className="bg-white/60 p-5 rounded-[2rem] border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 grayscale-[0.5] opacity-80">
-                 <div className="flex-1 space-y-1">
-                   <div className="flex items-center gap-3">
-                     <span className="font-black text-gray-500 text-base">#{order.id.toString().slice(-4)}</span>
-                     <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest">{order.total_amount} ₽</span>
-                   </div>
-                   <p className="text-[11px] text-gray-400 font-bold leading-tight">{order.delivery_address}</p>
-                   <p className="text-[9px] text-gray-300 font-medium">{new Date(order.created_at).toLocaleString()}</p>
-                 </div>
-                 <div className="flex items-center gap-3">
-                    <span className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest ${order.status === 'delivered' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-                      {order.status === 'delivered' ? 'Выполнен' : 'Отменен'}
-                    </span>
-                    <button onClick={() => setViewingOrder(order)} className="p-3 bg-gray-100 text-gray-500 rounded-xl hover:bg-gray-200 transition">
-                      <FileText size={18} />
-                    </button>
-                 </div>
-               </div>
-             ))}
-             {pastOrders.length === 0 && (
-               <div className="py-20 text-center text-gray-300 font-black uppercase text-xs tracking-widest">Архив пуст</div>
-             )}
-           </div>
-        )}
       </div>
+
+      {/* Edit Dish Modal */}
+      <Modal isOpen={!!editingDish} onClose={() => setEditingDish(null)} title={editingDish?.id ? "Правка блюда" : "Новое блюдо"}>
+        {editingDish && (
+          <form onSubmit={handleSaveDish} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Название</label>
+              <input 
+                type="text" 
+                value={editingDish.name} 
+                onChange={e => setEditingDish({...editingDish, name: e.target.value})} 
+                className="w-full p-4 bg-amber-50 rounded-2xl outline-none font-bold text-amber-950"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Цена (₽)</label>
+                <input 
+                  type="number" 
+                  value={editingDish.price} 
+                  onChange={e => setEditingDish({...editingDish, price: parseInt(e.target.value)})} 
+                  className="w-full p-4 bg-amber-50 rounded-2xl outline-none font-bold text-amber-950"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Категория</label>
+                <select 
+                  value={editingDish.category} 
+                  onChange={e => setEditingDish({...editingDish, category: e.target.value as any})}
+                  className="w-full p-4 bg-amber-50 rounded-2xl outline-none font-black text-[10px] uppercase"
+                >
+                  {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Ссылка на фото (URL)</label>
+              <input 
+                type="text" 
+                value={editingDish.image} 
+                onChange={e => setEditingDish({...editingDish, image: e.target.value})} 
+                className="w-full p-4 bg-amber-50 rounded-2xl outline-none font-bold text-amber-950"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Описание</label>
+              <textarea 
+                value={editingDish.description} 
+                onChange={e => setEditingDish({...editingDish, description: e.target.value})} 
+                className="w-full p-4 bg-amber-50 rounded-2xl outline-none font-medium text-amber-950 h-24 resize-none"
+              />
+            </div>
+            <div className="flex gap-3 pt-4">
+              <button type="button" onClick={() => setEditingDish(null)} className="flex-1 py-5 bg-amber-50 text-amber-950 rounded-2xl font-black text-[10px] uppercase tracking-widest">Отмена</button>
+              <button type="submit" disabled={isSavingDish} className="flex-1 py-5 bg-orange-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-2">
+                {isSavingDish ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Сохранить
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       {/* View Order Modal */}
       <Modal isOpen={!!viewingOrder} onClose={() => setViewingOrder(null)} title={`Заказ #${viewingOrder?.id.toString().slice(-4)}`}>
         {viewingOrder && (
           <div className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Адрес доставки</span>
-                <p className="font-bold text-amber-950 text-sm">{viewingOrder.delivery_address}</p>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Телефон клиента</span>
-                <p className="font-bold text-amber-950 text-sm">{viewingOrder.contact_phone}</p>
-              </div>
-              {viewingOrder.comment && (
-                <div className="flex flex-col gap-1 bg-amber-50 p-3 rounded-xl border border-amber-100">
-                  <span className="text-[9px] font-black uppercase text-amber-900/40 tracking-widest">Комментарий</span>
-                  <p className="text-amber-950 text-xs italic">"{viewingOrder.comment}"</p>
+            <div className="bg-amber-50 p-6 rounded-3xl space-y-3">
+              <div className="flex items-start gap-3">
+                <Package className="text-orange-500 mt-1" size={18} />
+                <div>
+                  <p className="text-[10px] font-black text-amber-900/40 uppercase tracking-widest">Адрес доставки</p>
+                  <p className="font-bold text-amber-950 leading-tight">{viewingOrder.delivery_address}</p>
                 </div>
-              )}
+              </div>
+              <div className="flex items-start gap-3">
+                <UserCheck className="text-orange-500 mt-1" size={18} />
+                <div>
+                  <p className="text-[10px] font-black text-amber-900/40 uppercase tracking-widest">Контакт</p>
+                  <p className="font-bold text-amber-950">{viewingOrder.contact_phone}</p>
+                </div>
+              </div>
             </div>
 
-            <div className="border-t pt-4 space-y-3">
-              <span className="text-[10px] font-black uppercase text-amber-900/40 tracking-widest">Состав</span>
-              {viewingOrder.items.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center bg-amber-50/50 p-3 rounded-xl border border-amber-50">
-                  <span className="font-bold text-amber-950 text-xs">{item.dish.name} <span className="text-orange-500">x{item.quantity}</span></span>
-                  <span className="font-black text-amber-950 text-xs">{item.dish.price * item.quantity} ₽</span>
+            <div className="space-y-3">
+              <p className="text-[10px] font-black text-amber-900/40 uppercase tracking-widest border-b border-amber-50 pb-2">Состав заказа</p>
+              {viewingOrder.items.map((item, i) => (
+                <div key={i} className="flex justify-between items-center text-sm">
+                  <span className="font-bold text-amber-950">{item.dish.name} <span className="text-orange-500 font-black">x{item.quantity}</span></span>
+                  <span className="font-black text-amber-900">{item.dish.price * item.quantity} ₽</span>
                 </div>
               ))}
+              <div className="pt-4 flex justify-between items-center border-t border-amber-50">
+                <span className="text-xs font-black uppercase opacity-40">Итого к оплате</span>
+                <span className="text-2xl font-black italic text-orange-500">{viewingOrder.total_amount} ₽</span>
+              </div>
             </div>
 
-            <div className="pt-4 flex justify-between items-center border-t">
-              <span className="text-xs font-black uppercase text-gray-400 tracking-widest">Итого</span>
-              <span className="text-2xl font-black text-orange-600">{viewingOrder.total_amount} ₽</span>
+            <div className="flex gap-2">
+              <button onClick={() => setViewingOrder(null)} className="w-full py-4 bg-amber-950 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest">Закрыть</button>
             </div>
-            
-            <button onClick={() => setViewingOrder(null)} className="w-full bg-amber-950 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">Закрыть</button>
           </div>
         )}
-      </Modal>
-
-      {/* Dish Modal */}
-      <Modal isOpen={isDishModalOpen} onClose={() => setIsDishModalOpen(false)} title="Блюдо">
-        <form onSubmit={handleSaveDish} className="space-y-4">
-          <input required placeholder="Название" className="w-full p-4 bg-amber-50 rounded-2xl font-bold outline-none text-sm border-none shadow-inner" value={editingDish?.name || ''} onChange={e => setEditingDish(prev => ({ ...prev, name: e.target.value }))} />
-          <textarea placeholder="Описание" className="w-full p-4 bg-amber-50 rounded-2xl font-bold outline-none h-24 resize-none text-xs border-none shadow-inner" value={editingDish?.description || ''} onChange={e => setEditingDish(prev => ({ ...prev, description: e.target.value }))} />
-          
-          {/* New Ingredients Field */}
-          <textarea 
-            placeholder="Состав (ингредиенты)" 
-            className="w-full p-4 bg-amber-50 rounded-2xl font-bold outline-none h-20 resize-none text-xs border-none shadow-inner" 
-            value={editingDish?.ingredients || ''} 
-            onChange={e => setEditingDish(prev => ({ ...prev, ingredients: e.target.value }))} 
-          />
-          
-          <div className="grid grid-cols-2 gap-3">
-             <input required type="number" placeholder="Цена" className="w-full p-4 bg-amber-50 rounded-2xl font-bold text-sm border-none shadow-inner" value={editingDish?.price || 0} onChange={e => setEditingDish(prev => ({ ...prev, price: parseInt(e.target.value) }))} />
-             <select className="w-full p-4 bg-amber-50 rounded-2xl font-bold text-[10px] uppercase border-none shadow-inner" value={editingDish?.category || 'main'} onChange={e => setEditingDish(prev => ({ ...prev, category: e.target.value as any }))}>
-               <option value="main">Основные</option>
-               <option value="soups">Супы</option>
-               <option value="bakery">Выпечка</option>
-               <option value="salads">Салаты</option>
-               <option value="drinks">Напитки</option>
-             </select>
-          </div>
-          <div className="space-y-4">
-            <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full h-32 border-4 border-dashed border-amber-100 rounded-[2.5rem] flex flex-col items-center justify-center text-amber-950/20 hover:bg-amber-50 transition gap-2 group">
-              {isUploading ? <Loader2 size={24} className="animate-spin" /> : <Upload size={24} />}
-              <span className="text-[9px] font-black uppercase tracking-widest">{editingDish?.image ? 'Изменить фото' : 'Выбрать фото'}</span>
-            </button>
-          </div>
-          <button disabled={isLoading || isUploading} className="w-full bg-amber-950 text-white py-5 rounded-[2rem] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl disabled:opacity-50">{isLoading ? <Loader2 size={20} className="animate-spin mx-auto"/> : "Сохранить"}</button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={!!dishToDelete} onClose={() => setDishToDelete(null)} title="Удалить?">
-        <div className="text-center space-y-6 py-4">
-          <AlertTriangle size={40} className="mx-auto text-red-500" />
-          <p className="text-amber-950 font-black text-sm">Удалить «{dishToDelete?.name}»?</p>
-          <div className="flex gap-3">
-            <button onClick={() => setDishToDelete(null)} className="flex-1 py-4 bg-amber-50 text-amber-950 rounded-xl font-black text-[10px] uppercase tracking-widest">Отмена</button>
-            <button onClick={async () => { if (dishToDelete) { await api.dishes.delete(dishToDelete.id); setDishToDelete(null); } }} className="flex-1 py-4 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest">Удалить</button>
-          </div>
-        </div>
       </Modal>
     </div>
   );

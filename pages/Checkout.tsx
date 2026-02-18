@@ -1,10 +1,11 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Minus, Plus, ShoppingBag, Loader2, CheckCircle, Phone, AlertCircle, MapPin, Hash, Layers, DoorOpen, Key, Info, Truck } from 'lucide-react';
+import { Trash2, Minus, Plus, ShoppingBag, Loader2, CheckCircle, Phone, AlertCircle, MapPin, Hash, Layers, DoorOpen, Key, Info, Truck, CreditCard } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { api } from '../apiClient.ts';
+import { initiateYooKassaPayment } from '../services/paymentService.ts';
 
 const MIN_ORDER_AMOUNT = 1200;
 const DELIVERY_FEE = 150;
@@ -27,12 +28,28 @@ const Checkout: React.FC = () => {
   const [phone, setPhone] = useState(user?.phone || '');
   const [comment, setValueComment] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRedirectingToPayment, setIsRedirectingToPayment] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isMinAmountReached = totalAmount >= MIN_ORDER_AMOUNT;
   const deliveryCost = totalAmount >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE;
   const grandTotal = totalAmount + deliveryCost;
+
+  if (isRedirectingToPayment) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-in fade-in zoom-in duration-500">
+        <div className="relative">
+          <div className="w-24 h-24 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
+          <CreditCard className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-orange-500" size={32} />
+        </div>
+        <div className="space-y-4">
+          <h2 className="text-3xl font-black text-amber-950 italic tracking-tighter">Переходим к оплате...</h2>
+          <p className="text-gray-500 font-medium max-w-xs mx-auto">Сейчас вы будете перенаправлены на защищенную страницу ЮKassa для завершения платежа.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isSuccess) {
     return (
@@ -69,13 +86,12 @@ const Checkout: React.FC = () => {
     setError(null);
 
     try {
-      // Собираем адрес в одну строку
       const fullAddress = `ул. ${street}, д. ${house}${entrance ? `, под. ${entrance}` : ''}${floor ? `, эт. ${floor}` : ''}${apartment ? `, кв. ${apartment}` : ''}${doorCode ? `, код: ${doorCode}` : ''}`;
 
       const orderPayload: any = { 
         user_id: user.id, 
         items, 
-        total_amount: grandTotal, // Используем итоговую сумму с учетом доставки
+        total_amount: grandTotal,
         delivery_address: fullAddress, 
         contact_phone: phone,
         comment, 
@@ -84,12 +100,28 @@ const Checkout: React.FC = () => {
         payment_method: 'card'
       };
 
-      await api.orders.create(orderPayload);
+      const order = await api.orders.create(orderPayload);
       
-      setIsSuccess(true);
-      clearCart();
+      // Инициируем платеж через ЮKassa
+      setIsRedirectingToPayment(true);
+      const paymentResult = await initiateYooKassaPayment(order.id, grandTotal);
+      
+      if (!paymentResult.success) {
+        setIsRedirectingToPayment(false);
+        setError(paymentResult.message || "Ошибка при создании платежа. Попробуйте еще раз.");
+        setIsProcessing(false);
+        return;
+      }
+
+      // Если мы в демо-режиме и редиректа не было
+      if (paymentResult.demo) {
+        setIsRedirectingToPayment(false);
+        setIsSuccess(true);
+        clearCart();
+      }
     } catch (err: any) { 
       console.error("Checkout Error:", err);
+      setIsRedirectingToPayment(false);
       setError("Ошибка при оформлении заказа."); 
     } finally { 
       setIsProcessing(false); 
@@ -150,10 +182,12 @@ const Checkout: React.FC = () => {
             </div>
           ) : (
             <div className="bg-white rounded-[4rem] p-10 space-y-10 shadow-sm border border-amber-50 animate-in slide-in-from-right-4 duration-500">
-              <h3 className="text-2xl font-black text-amber-950 italic tracking-tighter">Детали доставки</h3>
+              <div className="flex items-center gap-3">
+                <Truck className="text-orange-500" size={24} />
+                <h3 className="text-2xl font-black text-amber-950 italic tracking-tighter">Детали доставки</h3>
+              </div>
               
               <div className="space-y-6">
-                {/* Телефон */}
                 <div className="relative group">
                    <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-950/20 group-focus-within:text-orange-500 transition-colors" size={20} />
                    <input 
@@ -166,7 +200,6 @@ const Checkout: React.FC = () => {
                   />
                 </div>
 
-                {/* Адрес - Сетка */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="relative group md:col-span-2">
                     <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-950/20 group-focus-within:text-orange-500 transition-colors" size={20} />
@@ -273,7 +306,7 @@ const Checkout: React.FC = () => {
               <button 
                 onClick={() => step === 'cart' ? setStep('details') : handlePlaceOrder()} 
                 disabled={isProcessing || !isMinAmountReached}
-                className={`w-full py-8 rounded-[2.5rem] font-black text-[11px] uppercase tracking-[0.3em] shadow-xl transition-all flex items-center justify-center ${
+                className={`w-full py-8 rounded-[2.5rem] font-black text-[11px] uppercase tracking-[0.3em] shadow-xl transition-all flex items-center justify-center gap-3 ${
                   !isMinAmountReached 
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-50' 
                   : 'bg-orange-500 text-white hover:bg-orange-600 active:scale-95'
@@ -286,7 +319,10 @@ const Checkout: React.FC = () => {
                 ) : step === 'cart' ? (
                   'Далее к деталям'
                 ) : (
-                  'Оформить заказ'
+                  <>
+                    <CreditCard size={18} />
+                    Оплатить заказ
+                  </>
                 )}
               </button>
               
