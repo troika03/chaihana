@@ -6,6 +6,7 @@ import { supabase } from '../supabaseClient.ts';
 import { Dish } from './types.ts';
 import { useCart } from '../contexts/CartContext.tsx';
 import Modal from '../components/ui/Modal.tsx';
+import Logo from '../components/Logo.tsx';
 
 const CATEGORIES = [
   { id: 'all', label: 'Все' },
@@ -85,18 +86,22 @@ const Home: React.FC = () => {
       {/* Hero Section */}
       <div className="relative rounded-[2rem] md:rounded-[4rem] overflow-hidden bg-amber-950 text-white p-6 md:p-20 shadow-2xl flex flex-col items-center text-center">
         <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/oriental-tiles.png')]"></div>
-        <div className="relative z-10 w-full max-w-3xl space-y-4 md:space-y-8">
-          <h1 className="text-3xl md:text-8xl font-black italic tracking-tighter leading-[0.9] md:leading-tight">
-            Чайхана <br/><span className="text-orange-500">Жулебино</span>
+        <div className="relative z-10 w-full max-w-3xl space-y-4 md:space-y-8 flex flex-col items-center">
+          {/* Маленький силуэт чайника вместо большого логотипа */}
+          <div className="bg-white p-3 rounded-full mb-4 shadow-2xl">
+            <Logo size={64} color="#1e1b4b" hideText={true} className="md:w-[80px] md:h-[80px]" />
+          </div>
+          <h1 className="text-3xl md:text-7xl font-black italic tracking-tighter leading-[0.9] md:leading-tight">
+            Чайхана <br/><span className="text-orange-500 uppercase">Жулебино</span>
           </h1>
-          <div className="flex flex-wrap justify-center gap-2 md:gap-4">
+          <div className="flex flex-wrap justify-center gap-2 md:gap-4 mt-6">
             <div className="bg-white/5 border border-white/10 px-4 md:px-8 py-2 md:py-4 rounded-xl md:rounded-2xl flex items-center gap-2 md:gap-3 backdrop-blur-md">
               <Clock size={14} className="text-orange-400" />
               <span className="text-[8px] md:text-[11px] font-black uppercase tracking-widest">45 мин</span>
             </div>
             <div className="bg-white/5 border border-white/10 px-4 md:px-8 py-2 md:py-4 rounded-xl md:rounded-2xl flex items-center gap-2 md:gap-3 backdrop-blur-md">
               <MapPin size={14} className="text-orange-400" />
-              <span className="text-[8px] md:text-[11px] font-black uppercase tracking-widest">Жулебино</span>
+              <span className="text-[8px] md:text-[11px] font-black uppercase tracking-widest">Жулебинский б-р, 26</span>
             </div>
           </div>
         </div>
@@ -143,7 +148,6 @@ const Home: React.FC = () => {
               <h3 className="font-black text-lg md:text-2xl mb-1 md:mb-3 text-amber-950 truncate">{dish.name}</h3>
               <p className="text-[10px] md:text-[11px] text-gray-400 font-bold uppercase tracking-widest line-clamp-2 h-7 md:h-8 mb-2 md:mb-4">{dish.description}</p>
               
-              {/* Ценник под описанием */}
               <div className="font-black text-xl md:text-3xl text-orange-500 mb-4 md:mb-8 italic tracking-tighter">
                 {dish.price} ₽
               </div>

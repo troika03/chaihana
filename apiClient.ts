@@ -130,16 +130,49 @@ export const api = {
   },
   auth: {
     signUp: async (email: string, pass: string, name: string, address: string = ''): Promise<UserProfile> => {
-      const { data, error } = await supabase.auth.signUp({ email, password: pass, options: { data: { full_name: name } } });
+      const { data, error } = await supabase.auth.signUp({ 
+        email, 
+        password: pass, 
+        options: { data: { full_name: name } } 
+      });
       if (error) throw error;
-      const profile: UserProfile = { id: data.user!.id, full_name: name, address, role: email === 'himikovhoma@gmail.com' ? 'admin' : 'user' };
-      await supabase.from('profiles').upsert([profile]);
+      
+      const userId = data.user!.id;
+      const profile: UserProfile = { 
+        id: userId, 
+        full_name: name, 
+        address, 
+        role: email.toLowerCase() === 'himikovhoma@gmail.com' ? 'admin' : 'user' 
+      };
+      
+      const { error: profileError } = await supabase.from('profiles').upsert([profile]);
+      if (profileError) console.warn("Profile upsert failed during signup:", profileError);
+      
       return profile;
     },
     signIn: async (email: string, pass: string): Promise<UserProfile> => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
       if (error) throw error;
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+
+      // Получаем профиль. Если его нет, создаем на лету
+      const { data: profile, error: fetchError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (fetchError || !profile) {
+        console.warn("Profile missing for user, creating default...");
+        const newProfile: UserProfile = {
+          id: data.user.id,
+          full_name: data.user.user_metadata?.full_name || 'Гость',
+          address: '',
+          role: email.toLowerCase() === 'himikovhoma@gmail.com' ? 'admin' : 'user'
+        };
+        await supabase.from('profiles').upsert([newProfile]);
+        return newProfile;
+      }
+
       return profile as UserProfile;
     },
     signOut: async () => { 
@@ -149,8 +182,24 @@ export const api = {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return null;
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-        if (error || !data) return null;
+        
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+          
+        if (error || !data) {
+           // Если сессия есть, а профиля нет - создаем
+           const newProfile: UserProfile = {
+            id: session.user.id,
+            full_name: session.user.user_metadata?.full_name || 'Гость',
+            address: '',
+            role: session.user.email?.toLowerCase() === 'himikovhoma@gmail.com' ? 'admin' : 'user'
+          };
+          await supabase.from('profiles').upsert([newProfile]);
+          return newProfile;
+        }
         return data as UserProfile;
       } catch (e) {
         console.error("Session fetch failed:", e);

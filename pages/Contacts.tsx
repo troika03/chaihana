@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Phone, Mail, MapPin, Clock, MessageCircle, Instagram, Send } from 'lucide-react';
+import { Phone, Mail, MapPin, Clock, MessageCircle } from 'lucide-react';
 
 const Contacts: React.FC = () => {
   return (
@@ -22,7 +22,7 @@ const Contacts: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Адрес</h4>
-                  <p className="font-bold text-amber-950 text-lg">Москва, ул. Генерала Кузнецова, 14</p>
+                  <p className="font-bold text-amber-950 text-lg">Москва, Жулебинский бульвар, д. 26</p>
                 </div>
               </div>
 
@@ -32,7 +32,7 @@ const Contacts: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Телефон</h4>
-                  <a href="tel:+79000000000" className="font-bold text-amber-950 text-xl hover:text-orange-500 transition-colors">+7 (900) 000-00-00</a>
+                  <a href="tel:+79251116074" className="font-bold text-amber-950 text-xl hover:text-orange-500 transition-colors">+7 (925) 111-60-74</a>
                 </div>
               </div>
 
@@ -42,29 +42,21 @@ const Contacts: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Режим работы</h4>
-                  <p className="font-bold text-amber-950 text-lg">Ежедневно: 10:00 — 23:00</p>
+                  <p className="font-bold text-amber-950 text-lg">Ежедневно: 10:00 — 22:00</p>
                 </div>
               </div>
             </div>
 
-            <div className="pt-8 border-t border-amber-50">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-6 text-center">Мы в соцсетях</h4>
-              <div className="flex justify-center gap-6">
-                <a href="#" className="p-4 bg-amber-50 rounded-full text-amber-950 hover:bg-orange-500 hover:text-white transition-all transform hover:-translate-y-1">
-                  <Instagram size={24} />
-                </a>
-                <a href="#" className="p-4 bg-amber-50 rounded-full text-amber-950 hover:bg-blue-500 hover:text-white transition-all transform hover:-translate-y-1">
-                  <Send size={24} />
-                </a>
-                <a href="#" className="p-4 bg-amber-50 rounded-full text-amber-950 hover:bg-green-500 hover:text-white transition-all transform hover:-translate-y-1">
-                  <MessageCircle size={24} />
-                </a>
-              </div>
+            <div className="pt-8 border-t border-amber-50 flex items-center justify-center">
+               <div className="flex items-center gap-2 text-amber-900/40">
+                  <MessageCircle size={16} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Ждем вас в гости!</span>
+               </div>
             </div>
           </div>
         </div>
 
-        {/* Feedback Form / Map Placeholder */}
+        {/* Feedback CTA */}
         <div className="bg-amber-950 text-white p-10 rounded-[4rem] shadow-2xl flex flex-col justify-center items-center text-center space-y-8 relative overflow-hidden">
            <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/oriental-tiles.png')]"></div>
            <div className="relative z-10 space-y-6">
@@ -72,31 +64,30 @@ const Contacts: React.FC = () => {
                 <Mail size={40} className="text-orange-400" />
              </div>
              <div className="space-y-2">
-               <h3 className="text-2xl font-black italic tracking-tighter">Напишите нам</h3>
-               <p className="text-white/40 text-xs font-medium px-4">У вас есть вопросы или пожелания? Мы всегда на связи и готовы помочь!</p>
+               <h3 className="text-2xl font-black italic tracking-tighter">Есть вопросы?</h3>
+               <p className="text-white/40 text-xs font-medium px-4">Пишите нам на почту, мы обязательно ответим на все ваши предложения!</p>
              </div>
              <a 
               href="mailto:info@zhulebino.ru" 
               className="inline-block bg-orange-500 text-white px-10 py-5 rounded-[2rem] font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-orange-600 transition-all"
              >
-               Написать на почту
+               Написать письмо
              </a>
            </div>
         </div>
       </div>
 
-      {/* Map Section */}
-      <div className="bg-white p-2 rounded-[3rem] shadow-sm border border-amber-50 overflow-hidden h-80 md:h-[400px]">
-        <div className="w-full h-full bg-amber-100/50 flex items-center justify-center relative overflow-hidden">
-           <div className="absolute inset-0 opacity-20 grayscale bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=1600')] bg-center bg-cover" />
-           <div className="relative z-10 flex flex-col items-center gap-4 bg-white/90 backdrop-blur-md p-8 rounded-[2rem] shadow-2xl border border-white">
-              <MapPin size={48} className="text-orange-500 animate-bounce" />
-              <div className="text-center">
-                <p className="font-black text-amber-950 text-sm uppercase tracking-widest">Мы находимся здесь</p>
-                <p className="text-gray-500 text-[10px] font-bold mt-1">Жулебино, Генерала Кузнецова 14</p>
-              </div>
-           </div>
-        </div>
+      {/* Real Interactive Map Section */}
+      <div className="bg-white p-2 rounded-[3rem] shadow-sm border border-amber-50 overflow-hidden h-80 md:h-[500px]">
+        <iframe 
+          src="https://yandex.ru/map-widget/v1/?ll=37.854611%2C55.688126&mode=search&ol=geo&ouri=ymapsbm1%3A%2F%2Fgeo%3Fdata%3DCgg1NjY2NTQ4OBJC0KDQvtGB0YHQuNGPLCDQnNC-0YHQutCy0LAsINCW0YPQu9C10LHQvNC40L3RgdC60LjQuSDQsdGD0LvRjNCy0LDRgCwgMjYiCg2S9BlCFRYTX0I%2C&z=16" 
+          width="100%" 
+          height="100%" 
+          frameBorder="0" 
+          allowFullScreen={true}
+          style={{ position: 'relative' }}
+          title="Карта Чайхана Жулебино"
+        ></iframe>
       </div>
     </div>
   );

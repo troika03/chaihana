@@ -1,23 +1,34 @@
 
-// Added missing React import
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Minus, Plus, ShoppingBag, Loader2, CheckCircle, Phone, AlertCircle, MapPin } from 'lucide-react';
+import { Trash2, Minus, Plus, ShoppingBag, Loader2, CheckCircle, Phone, AlertCircle, MapPin, Hash, Layers, DoorOpen, Key, Info } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { api } from '../apiClient.ts';
+
+const MIN_ORDER_AMOUNT = 1200;
 
 const Checkout: React.FC = () => {
   const { items, updateQuantity, removeFromCart, totalAmount, clearCart } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState<'cart' | 'details'>('cart');
-  const [address, setAddress] = useState(user?.address || '');
+  
+  // Детальные поля адреса
+  const [street, setStreet] = useState('');
+  const [house, setHouse] = useState('');
+  const [entrance, setEntrance] = useState('');
+  const [floor, setFloor] = useState('');
+  const [apartment, setApartment] = useState('');
+  const [doorCode, setDoorCode] = useState('');
+  
   const [phone, setPhone] = useState(user?.phone || '');
   const [comment, setValueComment] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isMinAmountReached = totalAmount >= MIN_ORDER_AMOUNT;
 
   if (isSuccess) {
     return (
@@ -46,36 +57,47 @@ const Checkout: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     if (!user) { navigate('/profile'); return; }
-    if (!phone || phone.length < 10) { setError("Пожалуйста, введите корректный номер телефона."); return; }
-    if (step === 'details' && !address) { setError("Пожалуйста, укажите адрес доставки."); return; }
+    if (!isMinAmountReached) { setError(`Минимальная сумма заказа — ${MIN_ORDER_AMOUNT} ₽`); return; }
+    if (!phone || phone.replace(/\D/g, '').length < 10) { setError("Введите корректный номер телефона."); return; }
+    if (step === 'details' && (!street || !house)) { setError("Укажите улицу и номер дома."); return; }
     
     setIsProcessing(true);
     setError(null);
 
     try {
+      // Собираем адрес в одну строку
+      const fullAddress = `ул. ${street}, д. ${house}${entrance ? `, под. ${entrance}` : ''}${floor ? `, эт. ${floor}` : ''}${apartment ? `, кв. ${apartment}` : ''}${doorCode ? `, код: ${doorCode}` : ''}`;
+
       const orderPayload: any = { 
         user_id: user.id, 
         items, 
         total_amount: totalAmount, 
-        delivery_address: address, 
+        delivery_address: fullAddress, 
         contact_phone: phone,
         comment, 
         status: 'pending',
-        payment_status: 'pending', // Статус оплаты "Ожидание" (например, при получении)
+        payment_status: 'pending',
         payment_method: 'card'
       };
 
       await api.orders.create(orderPayload);
       
-      // Имитация успешного завершения
       setIsSuccess(true);
       clearCart();
     } catch (err: any) { 
       console.error("Checkout Error:", err);
-      setError("Ошибка при оформлении заказа. Попробуйте еще раз."); 
+      setError("Ошибка при оформлении заказа."); 
     } finally { 
       setIsProcessing(false); 
     }
+  };
+
+  const handlePhoneChange = (val: string) => {
+    setPhone(val.replace(/[^\d+()\-\s]/g, ''));
+  };
+
+  const handleNumericChange = (setter: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setter(e.target.value.replace(/\D/g, ''));
   };
 
   return (
@@ -85,6 +107,17 @@ const Checkout: React.FC = () => {
           <AlertCircle size={24} />
           <p className="font-bold text-sm uppercase tracking-wider">{error}</p>
           <button onClick={() => setError(null)} className="ml-auto text-xs font-black opacity-50 hover:opacity-100">ЗАКРЫТЬ</button>
+        </div>
+      )}
+
+      {!isMinAmountReached && (
+        <div className="bg-orange-50 border border-orange-200 p-6 rounded-[2rem] flex items-center gap-4 text-orange-700 animate-in slide-in-from-top-4">
+          <Info size={24} />
+          <div>
+            <p className="font-black text-sm uppercase tracking-wider">Минимальный заказ от {MIN_ORDER_AMOUNT} ₽</p>
+            <p className="text-xs font-medium opacity-80">Добавьте еще на {MIN_ORDER_AMOUNT - totalAmount} ₽, чтобы оформить доставку.</p>
+          </div>
+          <button onClick={() => navigate('/')} className="ml-auto px-6 py-2 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-colors">В меню</button>
         </div>
       )}
 
@@ -113,40 +146,104 @@ const Checkout: React.FC = () => {
             </div>
           ) : (
             <div className="bg-white rounded-[4rem] p-10 space-y-10 shadow-sm border border-amber-50 animate-in slide-in-from-right-4 duration-500">
-              <h3 className="text-2xl font-black text-amber-950 italic tracking-tighter">Куда доставить?</h3>
+              <h3 className="text-2xl font-black text-amber-950 italic tracking-tighter">Детали доставки</h3>
+              
               <div className="space-y-6">
+                {/* Телефон */}
                 <div className="relative group">
-                   <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-900/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+                   <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-950/20 group-focus-within:text-orange-500 transition-colors" size={20} />
                    <input 
                     type="tel" 
                     value={phone} 
-                    onChange={e => setPhone(e.target.value)} 
-                    placeholder="Ваш телефон (обязательно)" 
+                    onChange={e => handlePhoneChange(e.target.value)} 
+                    placeholder="Ваш телефон" 
                     className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
                     required
                   />
                 </div>
-                <div className="relative group">
-                  <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-900/20 group-focus-within:text-orange-500 transition-colors" size={20} />
-                  <input 
-                    type="text" 
-                    value={address} 
-                    onChange={e => setAddress(e.target.value)} 
-                    placeholder="Адрес доставки (улица, дом, кв)" 
-                    className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
-                    required
-                  />
+
+                {/* Адрес - Сетка */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="relative group md:col-span-2">
+                    <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-950/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+                    <input 
+                      type="text" 
+                      value={street} 
+                      onChange={e => setStreet(e.target.value)} 
+                      placeholder="Улица" 
+                      className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
+                      required
+                    />
+                  </div>
+                  
+                  <div className="relative group">
+                    <Hash className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-950/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+                    <input 
+                      type="text" 
+                      value={house} 
+                      onChange={e => setHouse(e.target.value)} 
+                      placeholder="Дом / Корпус" 
+                      className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
+                      required
+                    />
+                  </div>
+
+                  <div className="relative group">
+                    <DoorOpen className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-950/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+                    <input 
+                      type="text" 
+                      value={entrance} 
+                      onChange={handleNumericChange(setEntrance)} 
+                      placeholder="Подъезд" 
+                      className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
+                    />
+                  </div>
+
+                  <div className="relative group">
+                    <Layers className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-950/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+                    <input 
+                      type="text" 
+                      value={floor} 
+                      onChange={handleNumericChange(setFloor)} 
+                      placeholder="Этаж" 
+                      className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
+                    />
+                  </div>
+
+                  <div className="relative group">
+                    <Hash className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-950/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+                    <input 
+                      type="text" 
+                      value={apartment} 
+                      onChange={handleNumericChange(setApartment)} 
+                      placeholder="Квартира" 
+                      className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
+                    />
+                  </div>
+
+                  <div className="relative group md:col-span-2">
+                    <Key className="absolute left-6 top-1/2 -translate-y-1/2 text-amber-950/20 group-focus-within:text-orange-500 transition-colors" size={20} />
+                    <input 
+                      type="text" 
+                      value={doorCode} 
+                      onChange={e => setDoorCode(e.target.value)} 
+                      placeholder="Код домофона" 
+                      className="w-full p-6 pl-16 bg-amber-50 rounded-[2rem] outline-none font-bold text-amber-950 border-none focus:ring-4 focus:ring-orange-500/10 transition-all shadow-inner" 
+                    />
+                  </div>
                 </div>
+
                 <textarea 
                   value={comment} 
                   onChange={e => setValueComment(e.target.value)} 
                   placeholder="Комментарий для кухни или курьера" 
-                  className="w-full p-8 bg-amber-50 rounded-[3rem] outline-none font-bold text-amber-950 h-40 border-none focus:ring-4 focus:ring-orange-500/10 transition-all resize-none shadow-inner" 
+                  className="w-full p-8 bg-amber-50 rounded-[3rem] outline-none font-bold text-amber-950 h-32 border-none focus:ring-4 focus:ring-orange-500/10 transition-all resize-none shadow-inner" 
                 />
               </div>
             </div>
           )}
         </div>
+        
         <div className="lg:col-span-1">
           <div className="bg-amber-950 text-white rounded-[4rem] p-10 sticky top-24 shadow-2xl space-y-10 text-center overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
@@ -159,11 +256,17 @@ const Checkout: React.FC = () => {
             <div className="relative z-10 space-y-4">
               <button 
                 onClick={() => step === 'cart' ? setStep('details') : handlePlaceOrder()} 
-                disabled={isProcessing}
-                className="w-full bg-orange-500 text-white py-8 rounded-[2.5rem] font-black text-[11px] uppercase tracking-[0.3em] shadow-xl hover:bg-orange-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                disabled={isProcessing || !isMinAmountReached}
+                className={`w-full py-8 rounded-[2.5rem] font-black text-[11px] uppercase tracking-[0.3em] shadow-xl transition-all flex items-center justify-center ${
+                  !isMinAmountReached 
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-50' 
+                  : 'bg-orange-500 text-white hover:bg-orange-600 active:scale-95'
+                }`}
               >
                 {isProcessing ? (
                   <Loader2 className="animate-spin" size={24} />
+                ) : !isMinAmountReached ? (
+                  `Минимум ${MIN_ORDER_AMOUNT} ₽`
                 ) : step === 'cart' ? (
                   'Далее к деталям'
                 ) : (
@@ -184,7 +287,7 @@ const Checkout: React.FC = () => {
             <div className="relative z-10 pt-6 border-t border-white/10">
                <div className="flex items-center justify-center gap-3 text-white/40">
                   <ShoppingBag size={14} />
-                  <span className="text-[9px] font-black uppercase tracking-widest">Бесплатная доставка от 1500 ₽</span>
+                  <span className="text-[9px] font-black uppercase tracking-widest">Бесплатная доставка от 3000 ₽</span>
                </div>
             </div>
           </div>

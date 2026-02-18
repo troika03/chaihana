@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, ShoppingCart, User, Phone, UtensilsCrossed, Settings, Truck } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
+import Logo from './Logo.tsx';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -37,8 +38,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <Menu size={24} className="md:w-7 md:h-7" />
             </button>
             <Link to="/" className="flex items-center gap-2 group">
-              <div className="bg-white/20 p-1.5 md:p-2 rounded-full group-hover:bg-white/30 transition hidden sm:block">
-                <UtensilsCrossed size={20} className="md:w-6 md:h-6" />
+              <div className="bg-white p-1 rounded-full group-hover:scale-110 transition hidden sm:block">
+                <Logo size={36} color="#451a03" hideText={true} />
               </div>
               <h1 className="text-lg md:text-2xl font-bold tracking-tight md:tracking-wide">
                 Чайхана Жулебино
@@ -77,31 +78,37 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Sidebar */}
       <div className={`fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-amber-900 to-amber-800 text-white z-50 transform transition-transform duration-300 shadow-2xl ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex justify-between items-center p-5 border-b border-white/20">
-          <h2 className="text-xl font-bold">Меню</h2>
-          <button onClick={toggleSidebar} className="hover:text-orange-300 transition"><X size={28} /></button>
-        </div>
-        <nav className="p-4">
-          <ul className="space-y-2">
-            {navItems.map((item) => (
-              <li key={item.path}>
-                <Link to={item.path} onClick={toggleSidebar} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${location.pathname === item.path ? 'bg-white/20 font-semibold' : 'hover:bg-white/10'}`}>
-                  {item.icon} {item.label}
-                </Link>
-              </li>
-            ))}
-            
-            {isAdmin && (
-              <li className="pt-4 mt-4 border-t border-white/10">
-                <Link to="/admin" onClick={toggleSidebar} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition text-orange-400 font-black uppercase text-[10px] tracking-widest ${location.pathname === '/admin' ? 'bg-white/20' : 'hover:bg-white/10'}`}>
-                  <Settings size={20} /> Панель управления
-                </Link>
-              </li>
-            )}
-          </ul>
-        </nav>
-        <div className="absolute bottom-6 w-full text-center px-4">
-           <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] font-bold">Чайхана Жулебино</p>
+        <div className="flex flex-col h-full">
+          <div className="flex justify-between items-center p-5 border-b border-white/20">
+            <div className="flex items-center gap-3">
+              <Logo size={40} color="white" hideText={true} />
+              <h2 className="text-xl font-bold">Меню</h2>
+            </div>
+            <button onClick={toggleSidebar} className="hover:text-orange-300 transition"><X size={28} /></button>
+          </div>
+          <nav className="p-4 flex-1">
+            <ul className="space-y-2">
+              {navItems.map((item) => (
+                <li key={item.path}>
+                  <Link to={item.path} onClick={toggleSidebar} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${location.pathname === item.path ? 'bg-white/20 font-semibold' : 'hover:bg-white/10'}`}>
+                    {item.icon} {item.label}
+                  </Link>
+                </li>
+              ))}
+              
+              {isAdmin && (
+                <li className="pt-4 mt-4 border-t border-white/10">
+                  <Link to="/admin" onClick={toggleSidebar} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition text-orange-400 font-black uppercase text-[10px] tracking-widest ${location.pathname === '/admin' ? 'bg-white/20' : 'hover:bg-white/10'}`}>
+                    <Settings size={20} /> Панель управления
+                  </Link>
+                </li>
+              )}
+            </ul>
+          </nav>
+          <div className="p-6 text-center">
+             <Logo size={80} color="rgba(255,255,255,0.1)" className="mx-auto mb-2" />
+             <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] font-bold">Чайхана Жулебино</p>
+          </div>
         </div>
       </div>
 
@@ -113,8 +120,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Footer */}
       <footer className="bg-amber-950 text-white py-10 md:py-12 mt-auto">
         <div className="container mx-auto px-4 text-center">
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <UtensilsCrossed size={24} className="text-orange-400" />
+          <div className="flex items-center justify-center gap-4 mb-6">
+            <Logo size={60} color="#f97316" hideText={true} />
             <h2 className="text-lg md:text-xl font-bold">Чайхана Жулебино</h2>
           </div>
           <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-8 text-xs md:text-sm text-gray-400">
