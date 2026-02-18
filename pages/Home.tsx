@@ -87,9 +87,9 @@ const Home: React.FC = () => {
       <div className="relative rounded-[2rem] md:rounded-[4rem] overflow-hidden bg-amber-950 text-white p-6 md:p-20 shadow-2xl flex flex-col items-center text-center">
         <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/oriental-tiles.png')]"></div>
         <div className="relative z-10 w-full max-w-3xl space-y-4 md:space-y-8 flex flex-col items-center">
-          {/* Маленький силуэт чайника вместо большого логотипа */}
-          <div className="bg-white p-3 rounded-full mb-4 shadow-2xl">
-            <Logo size={64} color="#1e1b4b" hideText={true} className="md:w-[80px] md:h-[80px]" />
+          {/* Обновленный логотип из изображения */}
+          <div className="bg-white p-2 rounded-full mb-2 shadow-2xl scale-110">
+            <Logo size={70} color="#1e1b4b" hideText={false} className="md:w-[90px] md:h-[90px]" />
           </div>
           <h1 className="text-3xl md:text-7xl font-black italic tracking-tighter leading-[0.9] md:leading-tight">
             Чайхана <br/><span className="text-orange-500 uppercase">Жулебино</span>

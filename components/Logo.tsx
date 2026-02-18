@@ -18,17 +18,17 @@ const Logo: React.FC<LogoProps> = ({ className = "", size = 48, color = "#1e1b4b
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
-      {/* Внешнее кольцо */}
-      <circle cx="50" cy="50" r="46" stroke={color} strokeWidth="1.5" />
-      <circle cx="50" cy="50" r="42" stroke={color} strokeWidth="0.5" opacity="0.3" />
+      {/* Внешние концентрические круги (двойная рамка из логотипа) */}
+      <circle cx="50" cy="50" r="44" stroke={color} strokeWidth="1.2" />
+      <circle cx="50" cy="50" r="41" stroke={color} strokeWidth="0.8" />
       
-      {/* Текст по дуге */}
+      {/* Текст по верхней дуге */}
       {!hideText && (
         <>
           <defs>
-            <path id="archPathLogo" d="M 22,50 A 28,28 0 0 1 78,50" />
+            <path id="archPathLogo" d="M 28,50 A 22,22 0 0 1 72,50" />
           </defs>
-          <text fill={color} fontSize="5.5" fontWeight="900" style={{ letterSpacing: '0.08em', fontFamily: 'serif' }}>
+          <text fill={color} fontSize="4.8" fontWeight="500" style={{ letterSpacing: '0.02em', fontFamily: 'serif' }}>
             <textPath href="#archPathLogo" startOffset="50%" textAnchor="middle">
               ЧАЙХАНА ЖУЛЕБИНО
             </textPath>
@@ -36,40 +36,37 @@ const Logo: React.FC<LogoProps> = ({ className = "", size = 48, color = "#1e1b4b
         </>
       )}
 
-      {/* Чаша (Пиала) */}
-      <path 
-        d="M32 55H68C68 55 68 68 50 68C32 68 32 55 32 55Z" 
-        fill={color} 
-      />
-      <path 
-        d="M32 55C32 55 35 58 50 58C65 58 68 55 68 55" 
-        stroke="white" 
-        strokeWidth="0.5" 
-        opacity="0.3"
-      />
-      <rect x="44" y="68" width="12" height="3" rx="1" fill={color} />
-
-      {/* Пар над чашей */}
-      <path 
-        d="M45 50C45 50 47 48 45 46C43 44 45 42 45 42" 
-        stroke={color} 
-        strokeWidth="1.5" 
-        strokeLinecap="round" 
-        opacity="0.8"
-      />
-      <path 
-        d="M50 52C50 52 52 49 50 46C48 43 50 40 50 40" 
-        stroke={color} 
-        strokeWidth="2" 
-        strokeLinecap="round"
-      />
-      <path 
-        d="M55 50C55 50 57 48 55 46C53 44 55 42 55 42" 
-        stroke={color} 
-        strokeWidth="1.5" 
-        strokeLinecap="round" 
-        opacity="0.8"
-      />
+      {/* Центральный элемент: Пиала (Чаша) */}
+      <g transform="translate(0, 4)">
+        <path 
+          d="M38 58H62C62 58 61 68 50 68C39 68 38 58 38 58Z" 
+          fill={color} 
+        />
+        {/* Ножка пиалы */}
+        <path d="M47 68H53L52 70H48L47 68Z" fill={color} />
+        
+        {/* Три линии пара как на фото */}
+        <path 
+          d="M48 55C48 55 49 53 48 51C47 49 48 47 48 47" 
+          stroke={color} 
+          strokeWidth="1" 
+          strokeLinecap="round" 
+          opacity="0.8"
+        />
+        <path 
+          d="M50 54C50 54 51 51 50 48C49 45 50 42 50 42" 
+          stroke={color} 
+          strokeWidth="1.2" 
+          strokeLinecap="round"
+        />
+        <path 
+          d="M52 55C52 55 53 53 52 51C51 49 52 47 52 47" 
+          stroke={color} 
+          strokeWidth="1" 
+          strokeLinecap="round" 
+          opacity="0.8"
+        />
+      </g>
     </svg>
   );
 };
