@@ -18,43 +18,58 @@ const Logo: React.FC<LogoProps> = ({ className = "", size = 48, color = "#1e1b4b
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
-      {/* Тонкое внешнее кольцо */}
-      <circle cx="50" cy="50" r="46" stroke={color} strokeWidth="2" />
+      {/* Внешнее кольцо */}
+      <circle cx="50" cy="50" r="46" stroke={color} strokeWidth="1.5" />
+      <circle cx="50" cy="50" r="42" stroke={color} strokeWidth="0.5" opacity="0.3" />
       
-      {/* Текст по дуге сверху */}
+      {/* Текст по дуге */}
       {!hideText && (
         <>
           <defs>
-            <path id="archPath" d="M 25,55 A 25,25 0 0 1 75,55" />
+            <path id="archPathLogo" d="M 22,50 A 28,28 0 0 1 78,50" />
           </defs>
-          <text fill={color} fontSize="6.5" fontWeight="900" style={{ letterSpacing: '0.02em', fontFamily: 'serif' }}>
-            <textPath href="#archPath" startOffset="50%" textAnchor="middle">
+          <text fill={color} fontSize="5.5" fontWeight="900" style={{ letterSpacing: '0.08em', fontFamily: 'serif' }}>
+            <textPath href="#archPathLogo" startOffset="50%" textAnchor="middle">
               ЧАЙХАНА ЖУЛЕБИНО
             </textPath>
           </text>
         </>
       )}
 
-      {/* Силуэт чайника из изображения */}
+      {/* Чаша (Пиала) */}
       <path 
-        d="M50 50C44.5 50 39.5 52.5 37.5 56.5C36 59.5 36 63.5 37.5 66.5C39.5 70.5 44.5 73 50 73C55.5 73 60.5 70.5 62.5 66.5C64 63.5 64 59.5 62.5 56.5C60.5 52.5 55.5 50 50 50Z" 
+        d="M32 55H68C68 55 68 68 50 68C32 68 32 55 32 55Z" 
         fill={color} 
       />
-      {/* Носик */}
       <path 
-        d="M37.5 61.5L30 57C29 56.5 28 57 28 58V60C28 62 30 65 32 66.5L37.5 70" 
-        fill={color} 
+        d="M32 55C32 55 35 58 50 58C65 58 68 55 68 55" 
+        stroke="white" 
+        strokeWidth="0.5" 
+        opacity="0.3"
       />
-      {/* Ручка */}
+      <rect x="44" y="68" width="12" height="3" rx="1" fill={color} />
+
+      {/* Пар над чашей */}
       <path 
-        d="M62.5 58C67 56 72 57.5 73 63C74 68.5 70 73 65 74C63 74.5 61.5 73 61.5 73" 
+        d="M45 50C45 50 47 48 45 46C43 44 45 42 45 42" 
         stroke={color} 
-        strokeWidth="3.5" 
+        strokeWidth="1.5" 
+        strokeLinecap="round" 
+        opacity="0.8"
+      />
+      <path 
+        d="M50 52C50 52 52 49 50 46C48 43 50 40 50 40" 
+        stroke={color} 
+        strokeWidth="2" 
         strokeLinecap="round"
       />
-      {/* Крышка */}
-      <path d="M46 50H54C54 48 53 47 50 47C47 47 46 48 46 50Z" fill={color} />
-      <circle cx="50" cy="45.5" r="3" fill={color} />
+      <path 
+        d="M55 50C55 50 57 48 55 46C53 44 55 42 55 42" 
+        stroke={color} 
+        strokeWidth="1.5" 
+        strokeLinecap="round" 
+        opacity="0.8"
+      />
     </svg>
   );
 };

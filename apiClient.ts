@@ -2,14 +2,6 @@
 import { supabase } from './supabaseClient';
 import { Dish, Order, UserProfile } from './pages/types';
 
-/** 
- * НАСТРОЙКИ TELEGRAM 
- */
-const TELEGRAM_CONFIG = {
-  token: '7983984002:AAEkEqFjw8EC_xiIuyRbc2K_DHwqXml16k0',
-  chatId: '1846484566' 
-};
-
 const STATUS_MAP: Record<string, { label: string; emoji: string }> = {
   pending: { label: 'НОВЫЙ', emoji: '🔔' },
   confirmed: { label: 'ПРИНЯТ', emoji: '👍' },
@@ -27,60 +19,6 @@ export const INITIAL_DISHES: Partial<Dish>[] = [
   { name: 'Салат Ачи-Чучук', category: 'salads', price: 250, image: 'https://images.unsplash.com/photo-1546793665-c74683c3f38d?w=800', description: 'Тонко нарезанные помидоры с луком и острым перцем.', ingredients: 'Помидоры, красный лук, острый перец, базилик', available: true },
   { name: 'Чай с чабрецом', category: 'drinks', price: 300, image: 'https://images.unsplash.com/photo-1576091160550-2173bdd9962a?w=800', description: 'Ароматный черный чай в чайнике.', ingredients: 'Черный чай, чабрец свежий', available: true },
 ];
-
-const sendTelegramNotification = async (order: Order, type: 'NEW' | 'STATUS' = 'NEW', oldMessageId?: number | null): Promise<number | null> => {
-  const { token, chatId } = TELEGRAM_CONFIG;
-  if (!token || !chatId) return null;
-
-  try {
-    const messageToDelete = oldMessageId || order.telegram_message_id;
-    if (messageToDelete) {
-      await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, message_id: messageToDelete }),
-      }).catch(() => {});
-    }
-
-    const itemsList = order.items.map(item => `• <b>${item.dish.name}</b> x${item.quantity}`).join('\n');
-    const { label, emoji } = STATUS_MAP[order.status] || { label: order.status.toUpperCase(), emoji: 'ℹ️' };
-    
-    const title = type === 'NEW' ? '🔔 НОВЫЙ ЗАКАЗ' : `${emoji} ИЗМЕНЕНИЕ СТАТУСА`;
-    
-    const messageText = `<b>${title} #${order.id.toString().slice(-4)}</b>\n` +
-      `──────────────────\n` +
-      `✅ <b>Статус:</b> ${label} ${emoji}\n` +
-      `💰 <b>Сумма:</b> ${order.total_amount} ₽\n` +
-      `📍 <b>Адрес:</b> ${order.delivery_address}\n` +
-      `📞 <b>Телефон:</b> <code>${order.contact_phone || 'Не указан'}</code>\n` +
-      (order.comment ? `💬 <b>Комментарий:</b> ${order.comment}\n` : '') +
-      `──────────────────\n` +
-      `📝 <b>Состав:</b>\n${itemsList}\n` +
-      `──────────────────\n` +
-      `🕒 <i>${new Date().toLocaleString('ru-RU')}</i>`;
-
-    const adminUrl = `${window.location.origin}/#/admin`;
-
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        chat_id: chatId, 
-        text: messageText, 
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [[{ text: "📦 Управление в админ-панели", url: adminUrl }]]
-        }
-      }),
-    });
-
-    const result = await response.json();
-    return result.ok ? result.result.message_id : null;
-  } catch (err) { 
-    console.error('Telegram API Error:', err); 
-    return null;
-  }
-};
 
 export const api = {
   storage: {
@@ -154,7 +92,6 @@ export const api = {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
       if (error) throw error;
 
-      // Получаем профиль. Если его нет, создаем на лету
       const { data: profile, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
@@ -162,7 +99,6 @@ export const api = {
         .maybeSingle();
 
       if (fetchError || !profile) {
-        console.warn("Profile missing for user, creating default...");
         const newProfile: UserProfile = {
           id: data.user.id,
           full_name: data.user.user_metadata?.full_name || 'Гость',
@@ -190,7 +126,6 @@ export const api = {
           .maybeSingle();
           
         if (error || !data) {
-           // Если сессия есть, а профиля нет - создаем
            const newProfile: UserProfile = {
             id: session.user.id,
             full_name: session.user.user_metadata?.full_name || 'Гость',
@@ -211,15 +146,7 @@ export const api = {
     create: async (orderData: Partial<Order>) => {
       const { data, error } = await supabase.from('orders').insert([orderData]).select().single();
       if (error) throw error;
-      
-      const order = data as Order;
-      const msgId = await sendTelegramNotification(order, 'NEW');
-      
-      if (msgId) {
-        await supabase.from('orders').update({ telegram_message_id: msgId }).eq('id', order.id);
-      }
-      
-      return order;
+      return data as Order;
     },
     getAll: async () => { 
       const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false }); 
@@ -230,15 +157,8 @@ export const api = {
       return data || []; 
     },
     updateStatus: async (id: number, status: Order['status']) => {
-      const { data: oldOrder } = await supabase.from('orders').select('*').eq('id', id).single();
       const { data: updatedOrder, error } = await supabase.from('orders').update({ status }).eq('id', id).select().single();
       if (error) throw error;
-
-      const msgId = await sendTelegramNotification(updatedOrder as Order, 'STATUS', oldOrder?.telegram_message_id);
-      if (msgId) {
-        await supabase.from('orders').update({ telegram_message_id: msgId }).eq('id', id);
-      }
-      
       return updatedOrder as Order;
     }
   }
