@@ -1,12 +1,14 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Minus, Plus, ShoppingBag, Loader2, CheckCircle, Phone, AlertCircle, MapPin, Hash, Layers, DoorOpen, Key, Info } from 'lucide-react';
+import { Trash2, Minus, Plus, ShoppingBag, Loader2, CheckCircle, Phone, AlertCircle, MapPin, Hash, Layers, DoorOpen, Key, Info, Truck } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { api } from '../apiClient.ts';
 
 const MIN_ORDER_AMOUNT = 1200;
+const DELIVERY_FEE = 150;
+const FREE_DELIVERY_THRESHOLD = 3000;
 
 const Checkout: React.FC = () => {
   const { items, updateQuantity, removeFromCart, totalAmount, clearCart } = useCart();
@@ -29,6 +31,8 @@ const Checkout: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const isMinAmountReached = totalAmount >= MIN_ORDER_AMOUNT;
+  const deliveryCost = totalAmount >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE;
+  const grandTotal = totalAmount + deliveryCost;
 
   if (isSuccess) {
     return (
@@ -71,7 +75,7 @@ const Checkout: React.FC = () => {
       const orderPayload: any = { 
         user_id: user.id, 
         items, 
-        total_amount: totalAmount, 
+        total_amount: grandTotal, // Используем итоговую сумму с учетом доставки
         delivery_address: fullAddress, 
         contact_phone: phone,
         comment, 
@@ -245,12 +249,24 @@ const Checkout: React.FC = () => {
         </div>
         
         <div className="lg:col-span-1">
-          <div className="bg-amber-950 text-white rounded-[4rem] p-10 sticky top-24 shadow-2xl space-y-10 text-center overflow-hidden">
+          <div className="bg-amber-950 text-white rounded-[4rem] p-10 sticky top-24 shadow-2xl space-y-8 text-center overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
             
-            <div className="relative z-10 space-y-2">
-              <p className="text-sm font-black uppercase tracking-[0.3em] opacity-40">Сумма заказа</p>
-              <div className="text-6xl font-black italic tracking-tighter text-orange-500">{totalAmount} ₽</div>
+            <div className="relative z-10 space-y-4">
+              <div className="flex justify-between items-center text-white/60">
+                <span className="text-[10px] font-black uppercase tracking-widest">Блюда</span>
+                <span className="font-bold text-sm">{totalAmount} ₽</span>
+              </div>
+              <div className="flex justify-between items-center text-white/60 border-b border-white/10 pb-4">
+                <span className="text-[10px] font-black uppercase tracking-widest">Доставка</span>
+                <span className={`font-bold text-sm ${deliveryCost === 0 ? 'text-green-400' : ''}`}>
+                  {deliveryCost === 0 ? 'Бесплатно' : `${deliveryCost} ₽`}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-sm font-black uppercase tracking-[0.2em] opacity-40">Итого</span>
+                <div className="text-4xl font-black italic tracking-tighter text-orange-500">{grandTotal} ₽</div>
+              </div>
             </div>
 
             <div className="relative z-10 space-y-4">
@@ -286,8 +302,12 @@ const Checkout: React.FC = () => {
 
             <div className="relative z-10 pt-6 border-t border-white/10">
                <div className="flex items-center justify-center gap-3 text-white/40">
-                  <ShoppingBag size={14} />
-                  <span className="text-[9px] font-black uppercase tracking-widest">Бесплатная доставка от 3000 ₽</span>
+                  <Truck size={14} className={deliveryCost === 0 ? "text-green-400" : ""} />
+                  <span className="text-[9px] font-black uppercase tracking-widest">
+                    {totalAmount < FREE_DELIVERY_THRESHOLD 
+                      ? `Еще ${FREE_DELIVERY_THRESHOLD - totalAmount} ₽ до бесплатной доставки`
+                      : 'Бесплатная доставка активна!'}
+                  </span>
                </div>
             </div>
           </div>

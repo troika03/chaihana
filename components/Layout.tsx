@@ -127,14 +127,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-8 text-xs md:text-sm text-gray-400">
             <Link to="/delivery" className="hover:text-white transition">Доставка</Link>
             <Link to="/contacts" className="hover:text-white transition">Контакты</Link>
+            <Link to="/terms" className="hover:text-white transition">Соглашение</Link>
             <Link to="/privacy" className="hover:text-white transition">Приватность</Link>
           </div>
           
           <div className="space-y-1 mb-6">
             <p className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest">© 2025 Чайхана Жулебино. Все права защищены.</p>
-            <p className="text-[8px] md:text-[9px] text-gray-500/60 font-medium tracking-wider">
-              ИНН 7707083893 | ОГРНИП 325508100324129
-            </p>
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-[8px] md:text-[9px] text-gray-500/60 font-medium tracking-wider uppercase">
+                ИП Садыкова Махфуза Маъруфовна
+              </p>
+              <p className="text-[8px] md:text-[9px] text-gray-500/60 font-medium tracking-wider">
+                ИНН 7707083893 | ОГРНИП 325508100324129
+              </p>
+            </div>
           </div>
           <p className="text-[9px] md:text-[10px] text-gray-600 uppercase tracking-widest">Работаем с душой. Готовим с любовью.</p>
         </div>

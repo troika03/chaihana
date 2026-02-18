@@ -7,6 +7,7 @@ import Checkout from './pages/Checkout.tsx';
 import Admin from './pages/Admin.tsx';
 import Profile from './pages/Profile.tsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.tsx';
+import UserAgreement from './pages/UserAgreement.tsx';
 import Delivery from './pages/Delivery.tsx';
 import Contacts from './pages/Contacts.tsx';
 import { CartProvider } from './contexts/CartContext.tsx';
@@ -31,6 +32,7 @@ const App: React.FC = () => {
               <Route path="/profile" element={<Profile />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<UserAgreement />} />
               <Route path="/delivery" element={<Delivery />} />
               <Route path="/contacts" element={<Contacts />} />
               <Route path="*" element={<Navigate to="/" replace />} />
